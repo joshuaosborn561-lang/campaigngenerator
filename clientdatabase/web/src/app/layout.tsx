@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import GuideChatWidget from "@/components/GuideChatWidget";
 
 export const metadata: Metadata = {
   title: "Agency Intelligence Platform",
@@ -13,7 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="body-root">
+        {children}
+        <GuideChatWidget />
+      </body>
     </html>
   );
 }
