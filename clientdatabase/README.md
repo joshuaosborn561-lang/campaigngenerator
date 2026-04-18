@@ -6,7 +6,7 @@ A central data warehouse + Apollo-style contact search UI for B2B outbound cold 
 
 ```
 SmartLead + HeyReach (all client accounts)
-    ↓ API sync (Gemini Flash 2.5 classifies during ingestion)
+    ↓ API sync (Gemini Flash 2.5 classifies during nightly sync)
 Supabase (Postgres warehouse)
     ↓ queried by
 Next.js web app (Apollo-style UI + Gemini-powered AI search)
