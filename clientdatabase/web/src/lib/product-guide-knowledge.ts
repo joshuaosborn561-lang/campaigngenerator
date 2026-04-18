@@ -13,6 +13,11 @@ A central warehouse (Supabase) for SmartLead + HeyReach campaign data, with:
 - **Apollo import** (/import): diff Apollo CSV vs warehouse; optional Prospeo enrichment.
 - **Calendly webhooks** (/api/webhooks/calendly): verified meetings in \`calendly_events\`; use CALENDLY_ACCOUNT_MAP for agency vs client orgs.
 
+## Central ingestion API (ecosystem → warehouse)
+Authenticated with \`Authorization: Bearer INGEST_API_KEY\`. POST JSON to:
+- \`/api/ingest/clients\`, \`/api/ingest/campaigns\`, \`/api/ingest/leads\`, \`/api/ingest/replies\`, \`/api/ingest/client-profiles\`
+Rows land in \`synced_*\` tables (upsert on \`source_app\` + \`source_id\`). Apply migration \`009_synced_ingestion.sql\` in Supabase first.
+
 ## Reply Handler client import
 Expose \`GET\` JSON on the SalesGlider app (see \`reply-handler-agency-intel-export.example.ts\`). Set \`EXTERNAL_CLIENTS_SYNC_URL\` and \`EXTERNAL_CLIENTS_SYNC_BEARER_TOKEN\` here. Home page auto-syncs once per session; upsert matches \`clients.name\`.
 
