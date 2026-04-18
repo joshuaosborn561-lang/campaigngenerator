@@ -3,7 +3,10 @@
   "build": {
     "builder": "RAILPACK",
     "buildCommand": "npm run build",
-    "watchPatterns": ["src/**", "package.json", "package-lock.json", "next.config.ts", "tsconfig.json"]
+    "watchPatterns": [
+      "**",
+      "clientdatabase/web/**"
+    ]
   },
   "deploy": {
     "startCommand": "npm run start",
