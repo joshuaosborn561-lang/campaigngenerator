@@ -1,0 +1,6 @@
+# Root-level build artifacts
+*.tsbuildinfo
+
+# OS / editor
+.DS_Store
+Thumbs.db
