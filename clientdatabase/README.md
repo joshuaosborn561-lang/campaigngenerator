@@ -17,8 +17,8 @@ Next.js web app (Apollo-style UI + Gemini-powered AI search)
 | Component | Directory | Deploys to |
 |-----------|-----------|------------|
 | Database schema | `supabase/` | Supabase |
-| Sync service | `sync/` | Railway (cron) |
-| Web UI | `web/` | Vercel |
+| Sync service | `sync/` | Railway (cron) — repo `joshuaosborn561-lang/campaigngenerator`, branch `main`, root `clientdatabase/sync` |
+| Web UI | `web/` | Railway — same repo/branch, root `clientdatabase/web` |
 
 ## Features
 
