@@ -11,6 +11,23 @@ interface ClientRow {
   industry_vertical: string | null;
 }
 
+interface StrategyRow {
+  id: string;
+  name: string;
+}
+
+interface LaneRow {
+  id: string;
+  name: string;
+}
+
+interface OfferRow {
+  id: string;
+  name: string;
+  one_liner: string;
+  cta: string;
+}
+
 /**
  * Minimal stub-creation page. Captures just enough to create a brief row, then
  * redirects into the full Module 1 wizard where the operator fills out the
@@ -28,6 +45,13 @@ function NewCampaignBriefContent() {
   const [clientId, setClientId] = useState<string>("");
   const [name, setName] = useState("");
 
+  const [strategies, setStrategies] = useState<StrategyRow[]>([]);
+  const [strategyId, setStrategyId] = useState<string>("");
+  const [lanes, setLanes] = useState<LaneRow[]>([]);
+  const [laneId, setLaneId] = useState<string>("");
+  const [offers, setOffers] = useState<OfferRow[]>([]);
+  const [offerId, setOfferId] = useState<string>("");
+
   useEffect(() => {
     if (clientIdFromUrl) setClientId(clientIdFromUrl);
   }, [clientIdFromUrl]);
@@ -44,21 +68,88 @@ function NewCampaignBriefContent() {
     })();
   }, []);
 
+  // Load strategies when client changes
+  useEffect(() => {
+    if (!clientId) {
+      setStrategies([]);
+      setStrategyId("");
+      setLanes([]);
+      setLaneId("");
+      setOffers([]);
+      setOfferId("");
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch(`/api/campaign-tester/strategies?client_id=${encodeURIComponent(clientId)}`);
+        const data = await res.json();
+        setStrategies(data.strategies ?? []);
+      } catch {
+        setStrategies([]);
+      }
+    })();
+  }, [clientId]);
+
+  // Load lanes + offers when strategy changes
+  useEffect(() => {
+    if (!strategyId) {
+      setLanes([]);
+      setLaneId("");
+      setOffers([]);
+      setOfferId("");
+      return;
+    }
+    (async () => {
+      try {
+        const [lr, or] = await Promise.all([
+          fetch(`/api/campaign-tester/strategies/${encodeURIComponent(strategyId)}/lanes`),
+          fetch(`/api/campaign-tester/strategies/${encodeURIComponent(strategyId)}/offers`),
+        ]);
+        const ldata = await lr.json();
+        const odata = await or.json();
+        setLanes(ldata.lanes ?? []);
+        setOffers(odata.offers ?? []);
+      } catch {
+        setLanes([]);
+        setOffers([]);
+      }
+    })();
+  }, [strategyId]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
       setError("Campaign name is required.");
       return;
     }
+    if (!clientId) {
+      setError("Client is required for strategy-based campaigns.");
+      return;
+    }
+    if (!strategyId) {
+      setError("Pick a client strategy first.");
+      return;
+    }
+    if (!laneId) {
+      setError("Pick an ICP lane.");
+      return;
+    }
+    if (!offerId) {
+      setError("Pick an offer.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch("/api/campaign-tester/briefs", {
+      const res = await fetch("/api/campaign-tester/briefs/spawn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          client_id: clientId || null,
-          name: name.trim(),
+          client_id: clientId,
+          strategy_id: strategyId,
+          lane_id: laneId,
+          offer_id: offerId,
+          campaign_name: name.trim(),
         }),
       });
       const data = await res.json();
@@ -99,7 +190,7 @@ function NewCampaignBriefContent() {
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
                 >
-                  <option value="">Unassigned / internal</option>
+                  <option value="">Select a client…</option>
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -121,9 +212,70 @@ function NewCampaignBriefContent() {
                   className="ct-input"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Q2 MSP Audit — SMB"
+                  placeholder="e.g. MSP lane A — offer 1"
                   required
                 />
+              </div>
+            </div>
+          </div>
+
+          <div className="ct-card">
+            <h2>Strategy → lane → offer</h2>
+            <div className="ct-grid2">
+              <div className="ct-field">
+                <label>Client strategy *</label>
+                <select
+                  className="ct-select"
+                  value={strategyId}
+                  onChange={(e) => {
+                    setStrategyId(e.target.value);
+                    setLaneId("");
+                    setOfferId("");
+                  }}
+                  disabled={!clientId}
+                >
+                  <option value="">Select a strategy…</option>
+                  {strategies.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
+                  No strategy yet? Create one in Client Strategy (coming next) or via API.
+                </p>
+              </div>
+              <div className="ct-field">
+                <label>ICP lane *</label>
+                <select
+                  className="ct-select"
+                  value={laneId}
+                  onChange={(e) => setLaneId(e.target.value)}
+                  disabled={!strategyId}
+                >
+                  <option value="">Select a lane…</option>
+                  {lanes.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="ct-field" style={{ gridColumn: "1 / -1" }}>
+                <label>Offer *</label>
+                <select
+                  className="ct-select"
+                  value={offerId}
+                  onChange={(e) => setOfferId(e.target.value)}
+                  disabled={!strategyId}
+                >
+                  <option value="">Select an offer…</option>
+                  {offers.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
