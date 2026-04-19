@@ -8,6 +8,7 @@
  */
 
 import { runFullPlatformSync } from "../sync/src/nightly-sync.ts";
+// Same logic as sync/src/sync-from-platforms.ts (Docker image uses that path).
 
 runFullPlatformSync()
   .then((summary) => {
