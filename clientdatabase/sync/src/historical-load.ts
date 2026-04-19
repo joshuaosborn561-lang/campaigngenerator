@@ -14,6 +14,9 @@ import { SmartLeadClient } from "./services/smartlead-client.js";
 import { HeyReachClient } from "./services/heyreach-client.js";
 import { SupabaseStore } from "./services/supabase-store.js";
 import { Classifier } from "./services/classifier.js";
+import { InferenceService, enrichLeadFields } from "./services/inference.js";
+import { runInferenceForClient } from "./services/inference-runner.js";
+import { parseLocation } from "./utils/title-parser.js";
 import pLimit from "p-limit";
 import type { DBClient } from "./types/index.js";
 
@@ -28,6 +31,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
 
 const store = new SupabaseStore(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 const classifier = new Classifier(GEMINI_API_KEY);
+const inference = GEMINI_API_KEY ? new InferenceService(GEMINI_API_KEY) : null;
 const limit = pLimit(2); // concurrency limit for classification calls
 
 // ---- SmartLead sync (extracted from original syncClient) ----
@@ -136,6 +140,15 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
               console.log(`    ${leads.length} leads`);
               for (const slLead of leads) {
                         const sentiment = mapCategoryToSentiment(slLead.category);
+                        const loc = parseLocation(
+                          typeof slLead.location === "string" ? slLead.location : undefined
+                        );
+                        const extra = enrichLeadFields({
+                          title: slLead.designation,
+                          industry: typeof slLead.industry === "string" ? slLead.industry : undefined,
+                          company_size:
+                            typeof slLead.company_size === "string" ? slLead.company_size : undefined,
+                        });
                         await store.upsertLead({
                                     campaign_id: dbCampaign.id,
                                     smartlead_lead_id: slLead.id,
@@ -144,6 +157,10 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
                                     last_name: slLead.last_name,
                                     company: slLead.company_name,
                                     title: slLead.designation,
+                                    ...extra,
+                                    city: loc.city,
+                                    state: loc.state,
+                                    country: loc.country,
                                     status: slLead.lead_status,
                                     category: slLead.category,
                                     reply_sentiment: sentiment,
@@ -268,12 +285,14 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
                       // We need at least an email or LinkedIn URL to create a contact
                       if (!email && !linkedInUrl) continue;
 
+                      const contactExtras = enrichLeadFields({ title });
                       const dbContact = await store.upsertContact({
                                     email: email || null,
                                     first_name: firstName,
                                     last_name: lastName,
                                     company_name: companyName,
                                     title: title,
+                                    ...contactExtras,
                                     linkedin_url: linkedInUrl || undefined,
                                     source_platform: "heyreach",
                       });
@@ -352,6 +371,14 @@ async function syncClient(client: DBClient) {
 
       if (!client.smartlead_api_key && !client.heyreach_api_key) {
               console.warn(`  Skipping ${client.name}: no API keys configured`);
+      }
+
+      if (inference && GEMINI_API_KEY) {
+        try {
+          await runInferenceForClient(store, inference, client.id, client.name);
+        } catch (infErr: any) {
+          console.error(`  [${client.name}] Inference pass error:`, infErr?.message ?? infErr);
+        }
       }
 
       // Mark sync complete

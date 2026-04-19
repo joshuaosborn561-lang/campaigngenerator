@@ -1444,3 +1444,98 @@ input[type="checkbox"] {
   }
 }
 
+/* Intelligence (plain-English SQL) */
+.main-content.intelligence-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px;
+  overflow: hidden;
+}
+
+.intelligence-thread {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 12px;
+}
+
+.intelligence-turn {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.intelligence-q,
+.intelligence-a {
+  margin-bottom: 10px;
+}
+
+.intelligence-q strong,
+.intelligence-a strong {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.intelligence-answer {
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.intelligence-sql {
+  margin-top: 8px;
+  font-size: 11px;
+}
+
+.intelligence-sql summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.sql-block,
+.results-block {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  max-height: 240px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.intelligence-form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.intelligence-input {
+  flex: 1;
+  resize: none;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.intelligence-input:focus {
+  border-color: var(--accent);
+}
+
+.error-banner {
+  color: var(--red);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+

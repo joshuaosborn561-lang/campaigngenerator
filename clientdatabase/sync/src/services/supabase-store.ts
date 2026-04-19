@@ -14,6 +14,7 @@ export class SupabaseStore {
         const { data, error } = await this.db
           .from("clients")
           .select("*")
+          .eq("sync_enabled", true)
           .order("name");
         if (error) throw error;
         return data;
@@ -166,6 +167,14 @@ export class SupabaseStore {
         last_name?: string;
         company?: string;
         title?: string;
+        industry?: string;
+        company_size?: string;
+        company_revenue?: string;
+        seniority?: string;
+        department?: string;
+        city?: string;
+        state?: string;
+        country?: string;
         status?: string;
         category?: string;
         reply_sentiment?: string;
