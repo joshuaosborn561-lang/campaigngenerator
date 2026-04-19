@@ -5,8 +5,8 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "npx tsx src/nightly-sync.ts",
-    "cronSchedule": "0 2 * * *",
+    "startCommand": "npx tsx src/sync-from-platforms.ts",
+    "cronSchedule": "0 * * * *",
     "restartPolicyType": "NEVER"
   }
 }

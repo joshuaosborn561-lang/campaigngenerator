@@ -484,7 +484,10 @@ async function main() {
   console.log("\n✓ Nightly sync complete.");
 }
 
-main().catch((err) => {
+// Only run CLI when executed as `nightly-sync` (not when imported by sync-from-platforms).
+if (process.argv[1]?.includes("nightly-sync")) {
+  main().catch((err) => {
     console.error("Fatal error:", err);
     process.exit(1);
-});
+  });
+}

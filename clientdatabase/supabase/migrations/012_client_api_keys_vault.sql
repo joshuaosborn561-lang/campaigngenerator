@@ -3,8 +3,9 @@
 
 CREATE SCHEMA IF NOT EXISTS private;
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS vault WITH SCHEMA vault;
+-- pgcrypto: symmetric encrypt for column payloads (install if missing)
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+-- Vault: use Supabase-managed `supabase_vault` (schema `vault`) — do NOT `CREATE EXTENSION vault`
 
 -- Project-level passphrase (64 hex chars = 32 bytes), stored only inside Vault
 DO $$
