@@ -11,27 +11,51 @@ export class SupabaseStore {
   // ---- Clients ----
 
   async getClients() {
-        const { data, error } = await this.db
-          .from("clients")
-          .select("*")
-          .eq("sync_enabled", true)
-          .order("name");
+        const { data, error } = await this.db.rpc("get_clients_for_sync");
         if (error) throw error;
-        return data;
+        const rows = (data ?? []) as Array<{
+          id: string;
+          name: string;
+          industry_vertical: string | null;
+          smartlead_api_key: string | null;
+          heyreach_api_key: string | null;
+          sync_enabled: boolean | null;
+        }>;
+        return rows.filter((r) => r.sync_enabled !== false);
   }
 
   async upsertClient(client: {
         name: string;
         industry_vertical?: string;
         smartlead_api_key?: string;
+        heyreach_api_key?: string;
   }) {
-        const { data, error } = await this.db
+        const { data: row, error } = await this.db
           .from("clients")
-          .upsert(client, { onConflict: "name" })
-          .select()
+          .upsert(
+            { name: client.name, industry_vertical: client.industry_vertical ?? null },
+            { onConflict: "name" }
+          )
+          .select("id")
           .single();
         if (error) throw error;
-        return data;
+
+        const keys: Record<string, string> = {};
+        if (client.smartlead_api_key !== undefined) {
+          keys.smartlead = client.smartlead_api_key ?? "";
+        }
+        if (client.heyreach_api_key !== undefined) {
+          keys.heyreach = client.heyreach_api_key ?? "";
+        }
+        if (Object.keys(keys).length > 0) {
+          const { error: kerr } = await this.db.rpc("set_client_api_keys", {
+            p_client_id: row.id,
+            p_keys: keys,
+          });
+          if (kerr) throw kerr;
+        }
+
+        return row;
   }
 
   // ---- Campaigns ----

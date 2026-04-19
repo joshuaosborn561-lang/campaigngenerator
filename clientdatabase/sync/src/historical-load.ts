@@ -432,10 +432,10 @@ async function main() {
                 );
           console.log("\nExample SQL:");
           console.log(
-                  `  INSERT INTO clients (name, industry_vertical, smartlead_api_key, heyreach_api_key)`
+                  `  INSERT INTO clients (name, industry_vertical) VALUES ('Acme Corp', 'MSP');`
                 );
           console.log(
-                  `  VALUES ('Acme Corp', 'MSP', 'sl_api_key_here', 'hr_api_key_here');`
+                  `  Then set keys via Dashboard SQL or API: select set_client_api_keys(id, '{"smartlead":"..."}'::jsonb);`
                 );
           process.exit(0);
     }

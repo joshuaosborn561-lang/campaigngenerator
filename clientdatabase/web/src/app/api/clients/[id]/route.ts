@@ -12,7 +12,9 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
   const { data: row, error } = await supabase
     .from("clients")
-    .select("id, name, industry_vertical, notes, smartlead_api_key, heyreach_api_key, created_at, updated_at")
+    .select(
+      "id, name, industry_vertical, notes, smartlead_api_key_enc, heyreach_api_key_enc, created_at, updated_at"
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -36,8 +38,8 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       notes: row.notes,
       created_at: row.created_at,
       updated_at: row.updated_at,
-      has_smartlead_key: Boolean(row.smartlead_api_key),
-      has_heyreach_key: Boolean(row.heyreach_api_key),
+      has_smartlead_key: Boolean(row.smartlead_api_key_enc),
+      has_heyreach_key: Boolean(row.heyreach_api_key_enc),
     },
     stats: {
       campaigns: campaignCount ?? 0,
@@ -66,29 +68,44 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       patch.notes =
         typeof body.notes === "string" && body.notes.trim() ? body.notes.trim() : null;
     }
+    const keyPatch: Record<string, string> = {};
     if (typeof body.smartlead_api_key === "string") {
-      const v = body.smartlead_api_key.trim();
-      patch.smartlead_api_key = v || null;
+      keyPatch.smartlead = body.smartlead_api_key.trim();
     }
     if (typeof body.heyreach_api_key === "string") {
-      const v = body.heyreach_api_key.trim();
-      patch.heyreach_api_key = v || null;
+      keyPatch.heyreach = body.heyreach_api_key.trim();
     }
 
-    if (Object.keys(patch).length === 0) {
+    if (Object.keys(patch).length === 0 && Object.keys(keyPatch).length === 0) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    }
+
+    if (Object.keys(patch).length > 0) {
+      const { error } = await supabase.from("clients").update(patch).eq("id", id);
+      if (error) {
+        const status = error.code === "23505" ? 409 : 500;
+        return NextResponse.json({ error: error.message }, { status });
+      }
+    }
+
+    if (Object.keys(keyPatch).length > 0) {
+      const { error: kerr } = await supabase.rpc("set_client_api_keys", {
+        p_client_id: id,
+        p_keys: keyPatch,
+      });
+      if (kerr) {
+        return NextResponse.json({ error: kerr.message }, { status: 500 });
+      }
     }
 
     const { data, error } = await supabase
       .from("clients")
-      .update(patch)
-      .eq("id", id)
       .select("id, name, industry_vertical, notes, created_at, updated_at")
+      .eq("id", id)
       .single();
 
     if (error) {
-      const status = error.code === "23505" ? 409 : 500;
-      return NextResponse.json({ error: error.message }, { status });
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ client: data });

@@ -59,18 +59,36 @@ export async function runExternalClientsSync(): Promise<SyncClientsResult> {
   const payload = rows.map((r: ExternalClientRow) => ({
     name: r.name,
     industry_vertical: r.industry_vertical ?? null,
-    smartlead_api_key: r.smartlead_api_key ?? null,
-    heyreach_api_key: r.heyreach_api_key ?? null,
     notes: r.notes ?? null,
   }));
 
-  const { error } = await supabase.from("clients").upsert(payload, {
-    onConflict: "name",
-    ignoreDuplicates: false,
-  });
+  const { data: upserted, error } = await supabase
+    .from("clients")
+    .upsert(payload, {
+      onConflict: "name",
+      ignoreDuplicates: false,
+    })
+    .select("id, name");
 
   if (error) {
     return { ok: false, error: error.message };
+  }
+
+  const byName = new Map((upserted ?? []).map((u) => [u.name, u.id]));
+  for (const r of rows) {
+    const cid = byName.get(r.name);
+    if (!cid) continue;
+    const keys: Record<string, string> = {};
+    if (r.smartlead_api_key) keys.smartlead = r.smartlead_api_key;
+    if (r.heyreach_api_key) keys.heyreach = r.heyreach_api_key;
+    if (Object.keys(keys).length === 0) continue;
+    const { error: kerr } = await supabase.rpc("set_client_api_keys", {
+      p_client_id: cid,
+      p_keys: keys,
+    });
+    if (kerr) {
+      return { ok: false, error: kerr.message };
+    }
   }
 
   return {
