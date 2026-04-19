@@ -83,6 +83,9 @@ export default function CampaignTesterListPage() {
           <Link href="/campaign-tester/new" className="btn btn-primary">
             + New Campaign Brief
           </Link>
+          <Link href="/campaign-tester/strategy" className="btn">
+            Client Strategy
+          </Link>
           <div style={{ marginLeft: "auto" }}>
             <select
               className="ct-select"

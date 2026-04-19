@@ -12,14 +12,21 @@ function guideForPath(pathname: string): Guide | null {
     return {
       step: "Overview",
       title: "Campaign testing workspace",
-      body: "Open an existing brief to continue, or start **New Brief**. Each brief moves through modules in order: Brief → ICP → Infrastructure → Offers → copy tests.",
+      body: "Start with **Client Strategy** (ICP lanes + offer library), then use **New Campaign** to spawn briefs from a lane + offer. Tests generate the copy/sequence.",
     };
   }
   if (pathname.endsWith("/new")) {
     return {
       step: "Start",
       title: "Create a brief shell",
-      body: "Pick the **client** and **campaign name**. You will fill the real brief content in Module 1 next.",
+      body: "Pick the **client**, then select a **strategy**, **ICP lane**, and **offer**. This spawns a campaign brief without redoing setup each time.",
+    };
+  }
+  if (pathname.includes("/strategy")) {
+    return {
+      step: "Strategy",
+      title: "Client strategy",
+      body: "Define reusable ICP lanes and a generous offer library once per client. Spawn many campaigns from these building blocks.",
     };
   }
   if (pathname.includes("/setup/brief")) {
