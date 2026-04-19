@@ -3,6 +3,10 @@ import { supabase } from "@/lib/supabase";
 import { callClaude, parseJsonFromClaude } from "@/lib/campaign-tester/claude-client";
 import { getSignal, SIGNALS } from "@/lib/campaign-tester/signals";
 import type { ApolloFilters, BriefRecord, IcpRefinement } from "@/lib/campaign-tester/brief-types";
+import {
+  MODULE_1_BRIEF_CHECKLIST,
+  MODULE_3_ICP_CHECKLIST,
+} from "@/lib/campaign-tester/module-checklists";
 
 interface RouteContext {
   params: Promise<{ briefId: string }>;
@@ -55,6 +59,16 @@ OUTPUT SCHEMA:
   "sourcing_instructions": { [signal_id: string]: string },
   "tam_estimate": string
 }`;
+
+const APOLLO_SYSTEM_WITH_CHECKLISTS = [
+  SYSTEM_PROMPT,
+  "",
+  "--- EXPERT STAGE CHECKLISTS (Module 1 brief + Module 3 ICP — apply when estimating TAM, signals, and filters) ---",
+  MODULE_1_BRIEF_CHECKLIST,
+  "",
+  MODULE_3_ICP_CHECKLIST,
+  "--- END EXPERT CHECKLISTS ---",
+].join("\n");
 
 function renderIcpBlock(brief: BriefRecord): string {
   const ref: IcpRefinement = brief.icp_refinement ?? {};
@@ -133,7 +147,7 @@ export async function POST(_req: NextRequest, ctx: RouteContext) {
     ].join("\n");
 
     const raw = await callClaude({
-      system: SYSTEM_PROMPT,
+      system: APOLLO_SYSTEM_WITH_CHECKLISTS,
       user,
       maxTokens: 1500,
       grounding: {
@@ -156,7 +170,7 @@ export async function POST(_req: NextRequest, ctx: RouteContext) {
       apollo_filters: data.apollo_filters,
       debug:
         process.env.NODE_ENV === "development"
-          ? { system: SYSTEM_PROMPT, user, raw }
+          ? { system: APOLLO_SYSTEM_WITH_CHECKLISTS, user, raw }
           : undefined,
     });
   } catch (err: unknown) {
