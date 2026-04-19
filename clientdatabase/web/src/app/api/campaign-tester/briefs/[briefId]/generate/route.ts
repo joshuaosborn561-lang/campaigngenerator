@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { callClaude, parseJsonFromClaude } from "@/lib/campaign-tester/claude-client";
 import {
   buildPromptForTest,
-  SYSTEM_PROMPT,
+  buildGenerationSystemPrompt,
   type GenerationRequest,
   type PriorTestWinner,
 } from "@/lib/campaign-tester/prompts";
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       (brief.clients as { industry_vertical?: string | null } | null)?.industry_vertical ?? null;
 
     const raw = await callClaude({
-      system: SYSTEM_PROMPT,
+      system: buildGenerationSystemPrompt(),
       user: userPrompt,
       maxTokens: testNumber === 6 ? 4096 : 2048,
       grounding: {
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       // Expose the raw prompt + raw response for debugging in dev builds.
       debug:
         process.env.NODE_ENV === "development"
-          ? { system: SYSTEM_PROMPT, user: userPrompt, raw }
+          ? { system: buildGenerationSystemPrompt(), user: userPrompt, raw }
           : undefined,
     });
   } catch (err: any) {

@@ -22,6 +22,12 @@ import type {
   Offer,
   OfferConversationMessage,
 } from "./brief-types";
+import {
+  MODULE_1_BRIEF_CHECKLIST,
+  MODULE_2_INFRA_CHECKLIST,
+  MODULE_3_ICP_CHECKLIST,
+  MODULE_4_OFFERS_CHECKLIST,
+} from "./module-checklists";
 
 export interface OfferBriefContext {
   client_name?: string | null;
@@ -110,11 +116,22 @@ function renderOfferPool(pool: Offer[]): string {
 /**
  * System prompt (from the SalesGlider spec, verbatim intent preserved).
  */
+const STAGES_FOR_OFFER_IDEATION = [
+  MODULE_1_BRIEF_CHECKLIST,
+  MODULE_2_INFRA_CHECKLIST,
+  MODULE_3_ICP_CHECKLIST,
+  MODULE_4_OFFERS_CHECKLIST,
+].join("\n\n");
+
 export const INITIAL_OFFER_SYSTEM_PROMPT = `You are an expert B2B cold email offer strategist. Based on the campaign brief below, generate exactly 10 distinct offer ideas for why a cold prospect should reply to this email.
 
 An offer is not a service description — it is a specific, low-friction, high-value reason to start a conversation. Think: free Braves tickets, a free 30-day trial, a custom AI tool built for them, a Loom audit of their specific setup, a proprietary lead list, a case study that maps directly to their situation, a pay-per-result model.
 
 Rank the 10 ideas from most likely to convert to least likely based on the ICP. For each offer include: the offer name, the one-liner for the email body, the matching CTA, and a short rationale.
+
+--- EXPERT STAGE CHECKLISTS (Module 1–4 — follow when ideating every offer) ---
+${STAGES_FOR_OFFER_IDEATION}
+---
 
 STRICT RULES:
 - Only use information from the campaign brief provided. Do not invent results or case studies that are not listed.
@@ -144,6 +161,10 @@ export function buildInitialOfferPrompt(brief: OfferBriefContext): string {
 // -----------------------------------------------------------------------------
 
 export const REFINEMENT_SYSTEM_PROMPT = `You are the copy-and-strategy partner inside SalesGlider's Cold Email Campaign Testing Machine. The operator is iterating on a pool of 10 B2B cold email offer ideas for a specific campaign.
+
+--- EXPERT STAGE CHECKLISTS (Module 1–4 — honor when adding, editing, or ranking offers) ---
+${STAGES_FOR_OFFER_IDEATION}
+---
 
 Your job is to:
 1. Read the campaign brief, the current offer pool (with approval flags), and the full chat history.

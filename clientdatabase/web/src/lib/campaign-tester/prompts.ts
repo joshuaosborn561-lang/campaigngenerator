@@ -14,6 +14,12 @@
 import type { TestDefinition, TestVariant } from "./knowledge-base";
 import { getTest, getVariant } from "./knowledge-base";
 import type { Offer } from "./brief-types";
+import {
+  foundationContextForGeneration,
+  MODULE_3_ICP_CHECKLIST,
+  MODULE_4_OFFERS_CHECKLIST,
+  MODULE_5_TESTING_DISCIPLINE_CHECKLIST,
+} from "./module-checklists";
 
 export interface CampaignBriefContext {
   name: string;
@@ -71,6 +77,25 @@ OUTPUT SCHEMA (unless overridden in the user prompt):
   "body_plain_text": string,
   "variant_rationale": string  // 1-2 sentences explaining how this output embodies the chosen variant
 }`;
+
+/**
+ * Full system prompt for Tests 2–6 copy generation: base rules + expert stage checklists.
+ */
+export function buildGenerationSystemPrompt(): string {
+  return [
+    SYSTEM_PROMPT,
+    "",
+    "--- EXPERT STAGE CHECKLISTS (Modules 1–5 — apply while ideating; do not violate STRICT RULES above) ---",
+    foundationContextForGeneration(),
+    "",
+    MODULE_3_ICP_CHECKLIST,
+    "",
+    MODULE_4_OFFERS_CHECKLIST,
+    "",
+    MODULE_5_TESTING_DISCIPLINE_CHECKLIST,
+    "--- END EXPERT CHECKLISTS ---",
+  ].join("\n");
+}
 
 // -----------------------------------------------------------------------------
 // Shared context block
