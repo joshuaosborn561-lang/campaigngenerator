@@ -14,6 +14,9 @@ import { SmartLeadClient } from "./services/smartlead-client.js";
 import { HeyReachClient } from "./services/heyreach-client.js";
 import { SupabaseStore } from "./services/supabase-store.js";
 import { Classifier } from "./services/classifier.js";
+import { InferenceService, enrichLeadFields } from "./services/inference.js";
+import { runInferenceForClient } from "./services/inference-runner.js";
+import { parseLocation } from "./utils/title-parser.js";
 import pLimit from "p-limit";
 import type { DBClient } from "./types/index.js";
 
@@ -23,6 +26,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY!;
 
 const store = new SupabaseStore(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 const classifier = new Classifier(GEMINI_API_KEY);
+const inference = GEMINI_API_KEY ? new InferenceService(GEMINI_API_KEY) : null;
 const classifyLimit = pLimit(2);
 
 // 48 hours ago — used for HeyReach date filtering
@@ -143,6 +147,15 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
               const leads = await smartlead.getAllCampaignLeads(slCampaign.id);
               for (const slLead of leads) {
                         const sentiment = mapCategoryToSentiment(slLead.category);
+                        const loc = parseLocation(
+                          typeof slLead.location === "string" ? slLead.location : undefined
+                        );
+                        const extra = enrichLeadFields({
+                          title: slLead.designation,
+                          industry: typeof slLead.industry === "string" ? slLead.industry : undefined,
+                          company_size:
+                            typeof slLead.company_size === "string" ? slLead.company_size : undefined,
+                        });
                         await store.upsertLead({
                                     campaign_id: dbCampaign.id,
                                     smartlead_lead_id: slLead.id,
@@ -151,6 +164,10 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
                                     last_name: slLead.last_name,
                                     company: slLead.company_name,
                                     title: slLead.designation,
+                                    ...extra,
+                                    city: loc.city,
+                                    state: loc.state,
+                                    country: loc.country,
                                     status: slLead.lead_status,
                                     category: slLead.category,
                                     reply_sentiment: sentiment,
@@ -286,12 +303,14 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
 
                       if (!email && !linkedInUrl) continue;
 
+                      const contactExtras = enrichLeadFields({ title });
                       const dbContact = await store.upsertContact({
                                     email: email || null,
                                     first_name: firstName,
                                     last_name: lastName,
                                     company_name: companyName,
                                     title: title,
+                                    ...contactExtras,
                                     linkedin_url: linkedInUrl || undefined,
                                     source_platform: "heyreach",
                       });
@@ -337,7 +356,14 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
 
 // ---- Main sync orchestrator ----
 
-async function syncClient(client: DBClient) {
+export interface ClientSyncResult {
+  clientName: string;
+  campaigns: number;
+  leads: number;
+  error?: string;
+}
+
+async function syncClient(client: DBClient): Promise<ClientSyncResult> {
     const syncLog = await store.createSyncLog(client.id, "nightly");
     let totalCampaigns = 0;
     let totalLeads = 0;
@@ -371,6 +397,14 @@ async function syncClient(client: DBClient) {
               console.warn(`  Skipping ${client.name}: no API keys configured`);
       }
 
+      if (inference && GEMINI_API_KEY) {
+        try {
+          await runInferenceForClient(store, inference, client.id, client.name);
+        } catch (infErr: any) {
+          console.error(`  [${client.name}] Inference pass error:`, infErr?.message ?? infErr);
+        }
+      }
+
       await store.updateSyncLog(syncLog.id, {
               status: "completed",
               campaigns_synced: totalCampaigns,
@@ -381,6 +415,7 @@ async function syncClient(client: DBClient) {
       console.log(
                                       `  ✓ ${client.name}: ${totalCampaigns} campaigns, ${totalLeads} leads refreshed`
             );
+      return { clientName: client.name, campaigns: totalCampaigns, leads: totalLeads };
   } catch (err: any) {
         console.error(`  ✗ Error syncing ${client.name}:`, err.message);
         await store.updateSyncLog(syncLog.id, {
@@ -388,7 +423,34 @@ async function syncClient(client: DBClient) {
                 error_message: err.message,
                 completed_at: new Date().toISOString(),
         });
+        return { clientName: client.name, campaigns: 0, leads: 0, error: err.message };
   }
+}
+
+/** SmartLead + HeyReach pull + Gemini inference — use from cron or `scripts/sync-from-platforms`. */
+export async function runFullPlatformSync(): Promise<{
+  clientsSynced: number;
+  campaigns: number;
+  leads: number;
+  errors: number;
+}> {
+  const clients = await store.getClients();
+  let campaigns = 0;
+  let leads = 0;
+  let errors = 0;
+
+  for (const client of clients) {
+    const r = await syncClient(client);
+    campaigns += r.campaigns;
+    leads += r.leads;
+    if (r.error) errors++;
+  }
+
+  console.log(
+    `\nSummary: ${clients.length} client(s) processed, ${campaigns} campaign refreshes, ${leads} lead rows touched, ${errors} hard error(s)`
+  );
+
+  return { clientsSynced: clients.length, campaigns, leads, errors };
 }
 
 function mapCategoryToSentiment(category?: string): string | undefined {
@@ -417,14 +479,15 @@ async function main() {
 
   console.log(`Syncing ${clients.length} client(s)...`);
 
-  for (const client of clients) {
-        await syncClient(client);
-  }
+  await runFullPlatformSync();
 
   console.log("\n✓ Nightly sync complete.");
 }
 
-main().catch((err) => {
+// Only run CLI when executed as `nightly-sync` (not when imported by sync-from-platforms).
+if (process.argv[1]?.includes("nightly-sync")) {
+  main().catch((err) => {
     console.error("Fatal error:", err);
     process.exit(1);
-});
+  });
+}

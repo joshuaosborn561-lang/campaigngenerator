@@ -33,6 +33,12 @@ export interface SmartLeadLead {
     designation?: string;
     category?: string;
     lead_status?: string;
+    industry?: string;
+    company_size?: string;
+    location?: string;
+    city?: string;
+    state?: string;
+    country?: string;
     [key: string]: unknown;
 }
 

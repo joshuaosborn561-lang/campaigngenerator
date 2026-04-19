@@ -37,13 +37,11 @@ export async function POST(req: NextRequest) {
     const notes =
       typeof body.notes === "string" && body.notes.trim() ? body.notes.trim() : null;
 
-    const { data, error } = await supabase
+    const { data: row, error } = await supabase
       .from("clients")
       .insert({
         name,
         industry_vertical,
-        smartlead_api_key,
-        heyreach_api_key,
         notes,
       })
       .select("id, name, industry_vertical, created_at")
@@ -57,7 +55,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ client: data });
+    const keyPatch: Record<string, string> = {};
+    if (smartlead_api_key) keyPatch.smartlead = smartlead_api_key;
+    if (heyreach_api_key) keyPatch.heyreach = heyreach_api_key;
+    if (Object.keys(keyPatch).length > 0) {
+      const { error: kerr } = await supabase.rpc("set_client_api_keys", {
+        p_client_id: row.id,
+        p_keys: keyPatch,
+      });
+      if (kerr) {
+        return NextResponse.json({ error: kerr.message }, { status: 500 });
+      }
+    }
+
+    return NextResponse.json({ client: row });
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
