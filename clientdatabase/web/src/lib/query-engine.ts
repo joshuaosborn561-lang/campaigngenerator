@@ -15,7 +15,7 @@ DATABASE SCHEMA:
 VIEWS:
 - campaign_performance: joins campaigns + clients (campaign_name, client_name, industry_vertical, target_title, target_industry, offer_type, copy_patterns, send_volume, open_rate, reply_rate, bounce_rate, positive_reply_count, meetings_booked, list_source, campaign_start_date, status)
 - subject_line_performance: joins sequence_steps + campaigns + clients (subject_line, industry_vertical, target_title, offer_type, open_rate, reply_rate, campaign_name, client_name)
-- contact_search: all contact fields for Apollo-style filtering
+- contact_search: all contact fields for lead-database style filtering
 
 IMPORTANT RULES:
 1. Generate Supabase JS queries using the provided query tools — NOT raw SQL.
@@ -90,7 +90,7 @@ const TOOLS = [
   },
   {
     name: "query_contacts",
-    description: "Query the contact_search view. Apollo-style contact filtering by name, title, seniority, department, company, industry, size, location, status.",
+    description: "Query the contact_search view. Lead-database style contact filtering by name, title, seniority, department, company, industry, size, location, status.",
     parameters: {
       type: Type.OBJECT,
       properties: {

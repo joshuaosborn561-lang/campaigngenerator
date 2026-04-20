@@ -10,17 +10,10 @@ A central warehouse (Supabase) for SmartLead + HeyReach campaign data, with:
 - **Contacts**: deduplicated people with Apollo-style filters, CSV export.
 - **AI analyst** (/chat): asks natural-language questions; Gemini queries campaign/contact/Calendly data via tools.
 - **Campaign tester**: wizard from brief → ICP → infrastructure → offers → six structured copy tests.
-- **Apollo import** (/import): diff Apollo CSV vs warehouse; optional Prospeo enrichment.
 - **Calendly webhooks** (/api/webhooks/calendly): verified meetings in \`calendly_events\`; use CALENDLY_ACCOUNT_MAP for agency vs client orgs.
 
 ## Reply Handler client import
 Expose \`GET\` JSON on the SalesGlider app (see \`reply-handler-agency-intel-export.example.ts\`). Set \`EXTERNAL_CLIENTS_SYNC_URL\` and \`EXTERNAL_CLIENTS_SYNC_BEARER_TOKEN\` here. Home page auto-syncs once per session; upsert matches \`clients.name\`.
-
-## Getting started (order)
-1. **Supabase**: Run migrations in supabase/migrations (001+). Add rows in \`clients\` (name, vertical, SmartLead/HeyReach keys), or import from Reply Handler.
-2. **Sync** (Railway cron or local): loads campaigns, sequences, leads, classifies with Gemini, fills contacts.
-3. **Web env**: SUPABASE_URL, SUPABASE_SERVICE_KEY, GEMINI_API_KEY; optional ANTHROPIC_API_KEY (campaign tester), PROSPEO_API_KEY (import), Calendly signing keys + CALENDLY_ACCOUNT_MAP for webhooks.
-4. **Use the app**: Add clients in UI, open Contacts, run Campaign tester briefs, check AI analyst for performance questions.
 
 ## Clients (/clients, /clients/new)
 - Create a client with name, industry vertical, and API keys.
@@ -46,11 +39,6 @@ Expose \`GET\` JSON on the SalesGlider app (see \`reply-handler-agency-intel-exp
 7. **Diagnostic** optional: deeper checks.
 
 Uses ANTHROPIC_API_KEY for Claude generation where configured.
-
-## Import (/import)
-- Upload Apollo CSV; matches by LinkedIn, email, or name+company.
-- "Also enrich" needs PROSPEO_API_KEY.
-- Download Excel with match metadata.
 
 ## Troubleshooting
 - Empty contacts: run sync; confirm client keys and client_id linkage.

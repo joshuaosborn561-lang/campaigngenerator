@@ -24,7 +24,7 @@ const ASSET_OPTIONS = [
   { id: "loom_capacity", label: "Capacity to record Looms" },
   { id: "competitor_data", label: "Competitor follower / brand data" },
   { id: "tech_stack_data", label: "Technographic data (BuiltWith etc.)" },
-  { id: "hiring_signals", label: "Hiring signal access (Apollo / LinkedIn)" },
+  { id: "hiring_signals", label: "Hiring signal access (lead database / LinkedIn)" },
   { id: "social_proof", label: "Social proof (numbers, testimonials)" },
   { id: "data_assets", label: "Pre-built lead lists / reports" },
   { id: "physical_gifts", label: "Budget for physical gifts (shock & awe)" },

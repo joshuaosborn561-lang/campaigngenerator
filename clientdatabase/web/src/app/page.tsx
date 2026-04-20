@@ -51,7 +51,6 @@ const SYNC_SESSION_KEY = "agency_intel_client_sync_v1";
 export default function HomePage() {
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [guideOpen, setGuideOpen] = useState(true);
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncNote, setSyncNote] = useState<string | null>(null);
 
@@ -117,7 +116,7 @@ export default function HomePage() {
             <div>
               <h1 className="dash-title">Agency Intelligence</h1>
               <p className="dash-tagline">
-                Warehouse + Apollo-style search + AI analyst + campaign testing — one control surface for outbound ops.
+                Client management + lead database + campaign engine — one control surface for outbound ops.
               </p>
             </div>
           </div>
@@ -147,110 +146,6 @@ export default function HomePage() {
 
           <section className="dash-section">
             <div className="dash-section-head">
-              <h2>Getting started</h2>
-              <p className="dash-section-sub">Follow the flow once per environment, then live in the tiles below.</p>
-            </div>
-            <ol className="dash-flow">
-              <li className="dash-flow-step">
-                <span className="dash-flow-num">1</span>
-                <div className="dash-flow-body">
-                  <strong>Supabase ready</strong>
-                  <span>Run SQL migrations; confirm clients table exists.</span>
-                </div>
-              </li>
-              <li className="dash-flow-step">
-                <span className="dash-flow-num">2</span>
-                <div className="dash-flow-body">
-                  <strong>Add clients + keys</strong>
-                  <span>SmartLead / HeyReach keys unlock nightly sync for that client.</span>
-                </div>
-              </li>
-              <li className="dash-flow-step">
-                <span className="dash-flow-num">3</span>
-                <div className="dash-flow-body">
-                  <strong>Run sync</strong>
-                  <span>Railway cron or manual job loads campaigns into the warehouse.</span>
-                </div>
-              </li>
-              <li className="dash-flow-step">
-                <span className="dash-flow-num">4</span>
-                <div className="dash-flow-body">
-                  <strong>Work the surface</strong>
-                  <span>Contacts, AI analyst, campaign tester, Apollo import — pick your job.</span>
-                </div>
-              </li>
-            </ol>
-          </section>
-
-          <section className="dash-section">
-            <button
-              type="button"
-              className="dash-setup-toggle"
-              onClick={() => setGuideOpen((o) => !o)}
-              aria-expanded={guideOpen}
-            >
-              <span className="dash-setup-toggle-icon" aria-hidden>
-                <IconCloud />
-              </span>
-              <span>
-                <strong>Setup guide</strong>
-                <span className="dash-setup-hint"> Env vars, sync behavior, and how pieces connect</span>
-              </span>
-              <span className="dash-setup-chevron">{guideOpen ? "▼" : "▶"}</span>
-            </button>
-
-            {guideOpen && (
-              <div className="dash-setup-body">
-                <div className="dash-setup-col">
-                  <h3>
-                    <IconUsers /> Clients
-                  </h3>
-                  <p>
-                    Each client row stores <strong>name</strong>, <strong>vertical</strong>, and API keys. The sync job
-                    uses those keys to pull only that customer&apos;s SmartLead / HeyReach data into shared tables.
-                  </p>
-                </div>
-                <div className="dash-setup-col">
-                  <h3>Reply Handler → here</h3>
-                  <p>
-                    To avoid re-typing clients, add a small <code>GET</code> export on{" "}
-                    <code>app-production-9354</code> (see <code>reply-handler-agency-intel-export.example.ts</code>),
-                    then set <code>EXTERNAL_CLIENTS_SYNC_URL</code> and <code>EXTERNAL_CLIENTS_SYNC_BEARER_TOKEN</code>.
-                    This dashboard pulls and upserts by client name once per browser session, or when you click{" "}
-                    <strong>Sync from Reply Handler</strong>.
-                  </p>
-                </div>
-                <div className="dash-setup-col">
-                  <h3>
-                    <IconSearch /> Contacts &amp; analyst
-                  </h3>
-                  <p>
-                    Contacts dedupe across campaigns. The <strong>AI analyst</strong> asks natural-language questions
-                    against live warehouse data (reply rates, subjects, Calendly truth, etc.).
-                  </p>
-                </div>
-                <div className="dash-setup-col">
-                  <h3>
-                    <IconSpark /> Campaign tester
-                  </h3>
-                  <p>
-                    Brief → ICP → infrastructure → offers → <strong>six copy tests</strong>. Claude steps need{" "}
-                    <code>ANTHROPIC_API_KEY</code> in Railway/Vercel.
-                  </p>
-                </div>
-                <div className="dash-setup-col">
-                  <h3>Webhooks</h3>
-                  <p>
-                    Calendly posts to <code>/api/webhooks/calendly</code>. Configure signing keys and optional{" "}
-                    <code>CALENDLY_ACCOUNT_MAP</code> when multiple Calendly orgs hit one URL.
-                  </p>
-                </div>
-              </div>
-            )}
-          </section>
-
-          <section className="dash-section">
-            <div className="dash-section-head">
               <h2>Workspace</h2>
               <p className="dash-section-sub">Jump to the tool for the task — icons match the left rail.</p>
             </div>
@@ -276,7 +171,7 @@ export default function HomePage() {
                   <IconSearch />
                 </div>
                 <div className="dash-card-title">Contacts</div>
-                <p className="dash-card-desc">Filters like Apollo, exports, and AI-assisted query bar.</p>
+                <p className="dash-card-desc">Lead-database filters, exports, and AI-assisted query bar.</p>
                 <span className="dash-card-link">Open →</span>
               </Link>
               <Link href="/chat" className="dash-card">
@@ -299,14 +194,17 @@ export default function HomePage() {
                 <p className="dash-card-desc">Wizard + structured tests before you scale creative.</p>
                 <span className="dash-card-link">Open →</span>
               </Link>
-              <Link href="/import" className="dash-card">
-                <div className="dash-card-icon">
+              <Link href="/campaign-tester/strategy" className="dash-card">
+                <div className="dash-card-icon dash-card-icon-accent">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                    <path d="M12 2v6" />
+                    <path d="M12 16v6" />
+                    <path d="M4 8h16" />
+                    <path d="M4 16h16" />
                   </svg>
                 </div>
-                <div className="dash-card-title">Apollo import</div>
-                <p className="dash-card-desc">Diff CSV vs DB; optional Prospeo enrichment for new rows.</p>
+                <div className="dash-card-title">Client onboarding</div>
+                <p className="dash-card-desc">Define ICP lanes + offer library once per client.</p>
                 <span className="dash-card-link">Open →</span>
               </Link>
             </div>

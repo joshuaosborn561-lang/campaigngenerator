@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase";
 
 /**
  * GET /api/contacts
- * Apollo-style contact search with filters, sorting, pagination.
+ * Lead-database style contact search with filters, sorting, pagination.
  *
  * Query params:
  *   q          - full-text search (name, title, company)

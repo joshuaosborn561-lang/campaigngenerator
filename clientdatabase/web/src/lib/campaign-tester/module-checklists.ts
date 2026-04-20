@@ -3,7 +3,7 @@
  *
  * Where they apply in code:
  * - Module 1–2 + 3 + 4: offer pool (POST /offers, offers/chat) — INITIAL + REFINEMENT prompts
- * - Module 1 + 3: Apollo filters (POST /apollo-filters)
+ * - Module 1 + 3: lead filters (POST /apollo-filters)
  * - Module 1–5: Tests 2–6 copy (POST /generate) via buildGenerationSystemPrompt()
  *
  * Setup pages brief / infra / icp / offers are mostly form UI; Claude sees these
@@ -30,7 +30,7 @@ STAGE 2 CHECKLIST — INFRASTRUCTURE / DELIVERY (do not promise sends that break
 - Authentication: SPF, DKIM, DMARC must be valid for sending domains — never imply sketchy or unauthenticated sending.
 `.trim();
 
-/** Stage 3 — module_3_icp: targeting (Apollo / filters / signals) */
+/** Stage 3 — module_3_icp: targeting (lead filters / signals) */
 export const MODULE_3_ICP_CHECKLIST = `
 STAGE 3 CHECKLIST — ICP / TARGETING MATRIX (apply when building filters, TAM notes, and signal strategy):
 - TAM: Give a sane reachable-contact estimate or range before over-narrowing.

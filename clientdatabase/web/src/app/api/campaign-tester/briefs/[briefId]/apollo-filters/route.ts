@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { callClaude, parseJsonFromClaude } from "@/lib/campaign-tester/claude-client";
+import { GoogleGenAI } from "@google/genai";
 import { getSignal, SIGNALS } from "@/lib/campaign-tester/signals";
 import type { ApolloFilters, BriefRecord, IcpRefinement } from "@/lib/campaign-tester/brief-types";
 import {
@@ -14,17 +14,17 @@ interface RouteContext {
 
 const SYSTEM_PROMPT = `You are a B2B list-building operator for SalesGlider's Cold Email Campaign Testing Machine.
 
-Given the campaign brief + refined ICP + selected buying signals, produce an Apollo / AI-Ark filter specification and per-signal sourcing instructions.
+Given the campaign brief + refined ICP + selected buying signals, produce a lead filter specification and per-signal sourcing instructions.
 
 TARGETING PHILOSOPHY — READ THIS CAREFULLY:
-Apollo's industry taxonomy is crude and unreliable ("Information Technology", "Computer Software", "Marketing and Advertising" — these buckets are too wide to target sharply). DO NOT rely on industries as the primary targeting axis. Instead, drive targeting with INDUSTRY-SPECIFIC KEYWORDS: terms, acronyms, tools, certifications, job-description language, and product categories that ONLY people inside this industry use. That is the sharpest filter Apollo / AI-Ark has.
+Industry taxonomy is crude and unreliable ("Information Technology", "Computer Software", "Marketing and Advertising" — these buckets are too wide to target sharply). DO NOT rely on industries as the primary targeting axis. Instead, drive targeting with INDUSTRY-SPECIFIC KEYWORDS: terms, acronyms, tools, certifications, job-description language, and product categories that ONLY people inside this industry use. That is the sharpest lever most lead databases have.
 
 KEYWORD RULES (this is the most important part of your output):
 - Generate 8-20 keywords. Each must be a phrase a non-industry person would not recognize or use casually.
 - Favor: industry acronyms, regulation names, tool categories, certification names, deliverable types, billing model names, workflow jargon, customer-type shorthand.
 - Avoid: generic business words ("sales", "growth", "operations"), the literal industry name, company-stage words ("startup", "enterprise").
 - Mix keyword types across: (a) role/title keywords, (b) company-description keywords, (c) tools/stack keywords, (d) certification/compliance keywords.
-- Where Apollo's keyword field is used, assume it scans job titles + company descriptions + tech stacks combined.
+- Where a keyword field is used, assume it scans job titles + company descriptions + tech stacks combined.
 
 INDUSTRY KEYWORD EXAMPLES (for illustration only — generate keywords appropriate to the brief's actual industry):
 - MSPs: "managed services provider", "MSP", "RMM", "PSA", "SOC 2", "NOC", "endpoint management", "co-managed IT", "quarterly business review", "ticket volume", "MSP peer group"
@@ -34,14 +34,14 @@ INDUSTRY KEYWORD EXAMPLES (for illustration only — generate keywords appropria
 - SaaS: the category name, not "SaaS" itself (e.g. "product-led growth", "PLG motion", "usage-based pricing", "developer tools", "horizontal B2B SaaS", "vertical SaaS")
 
 OTHER FIELD RULES:
-- job_titles: 3-8 operator-ready Apollo titles. Ranked 1-3 should be the sharpest. Include variations ("VP of Sales", "SVP Sales", "Head of Sales").
-- industries: AT MOST 3 entries, and ONLY if the Apollo taxonomy genuinely maps. If it doesn't, return an empty array and rely on keywords. Never duplicate industry-as-keyword.
-- employee_count: a single string range Apollo accepts ("11-50", "51-200", "50-500").
+- job_titles: 3-8 operator-ready titles. Ranked 1-3 should be the sharpest. Include variations ("VP of Sales", "SVP Sales", "Head of Sales").
+- industries: AT MOST 3 entries, and ONLY if the taxonomy genuinely maps. If it doesn't, return an empty array and rely on keywords. Never duplicate industry-as-keyword.
+- employee_count: a single string range (example: "11-50", "51-200", "50-500").
 - geography: 1-5 locations. Country/region level unless brief explicitly scopes smaller.
 - exclude: negative keywords (industries/titles/terms you explicitly want filtered OUT).
-- signals_to_layer: the signal ids the operator already selected, listed so Apollo / AI-Ark can stack them.
+- signals_to_layer: the signal ids the operator already selected.
 - sourcing_instructions: one entry per signal id in the provided list. Keys are signal ids verbatim; values are 1-3 sentence instructions covering tool, filter, and output format.
-- tam_estimate: short range string like "8,000–12,000 contacts in Apollo" — OK to say "unknown, test with a 500-row pull" if genuinely unclear.
+- tam_estimate: short range string like "8,000–12,000 contacts" — OK to say "unknown, test with a 500-row pull" if genuinely unclear.
 
 STRICT RULES:
 - Only use information from the brief + refined ICP + selected signals. Do not invent claims.
@@ -69,6 +69,14 @@ const APOLLO_SYSTEM_WITH_CHECKLISTS = [
   MODULE_3_ICP_CHECKLIST,
   "--- END EXPERT CHECKLISTS ---",
 ].join("\n");
+
+const GEMINI_MODEL = "gemini-2.5-flash";
+
+function extractJsonObject(text: string): string | null {
+  const s = text.trim().replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
+  const match = s.match(/\{[\s\S]*\}/);
+  return match ? match[0] : null;
+}
 
 function renderIcpBlock(brief: BriefRecord): string {
   const ref: IcpRefinement = brief.icp_refinement ?? {};
@@ -116,7 +124,7 @@ function renderIcpBlock(brief: BriefRecord): string {
  * POST /api/campaign-tester/briefs/:briefId/apollo-filters
  *
  * Uses the brief's ICP refinement + selected signals to produce an
- * Apollo / AI-Ark filter spec via Claude. Persists the result on
+ * Lead filter spec via Gemini. Persists the result on
  * campaign_briefs.apollo_filters and returns it.
  */
 export async function POST(_req: NextRequest, ctx: RouteContext) {
@@ -143,19 +151,28 @@ export async function POST(_req: NextRequest, ctx: RouteContext) {
       "",
       `AVAILABLE SIGNAL IDS (must appear as keys in sourcing_instructions): ${signalList.map((s) => s.id).join(", ")}`,
       "",
-      "TASK: Produce the Apollo / AI-Ark filter JSON.",
+      "TASK: Produce the lead filter JSON.",
     ].join("\n");
 
-    const raw = await callClaude({
-      system: APOLLO_SYSTEM_WITH_CHECKLISTS,
-      user,
-      maxTokens: 1500,
-      grounding: {
-        clientId: brief.client_id ?? null,
-        industryVertical: brief.target_industry ?? brief.clients?.industry_vertical ?? null,
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 });
+    }
+    const genai = new GoogleGenAI({ apiKey });
+    const resp = await genai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: `${APOLLO_SYSTEM_WITH_CHECKLISTS}\n\n--- INPUT ---\n${user}`,
+      config: {
+        // Slightly reduce "creative" variance; this is structured operator output.
+        temperature: 0.2,
       },
     });
-    const parsed = parseJsonFromClaude<ApolloFilters>(raw);
+    const raw = (resp.text ?? "").trim();
+    const jsonStr = extractJsonObject(raw);
+    if (!jsonStr) {
+      return NextResponse.json({ error: "Model did not return JSON" }, { status: 500 });
+    }
+    const parsed = JSON.parse(jsonStr) as ApolloFilters;
 
     const { data, error } = await supabase
       .from("campaign_briefs")
