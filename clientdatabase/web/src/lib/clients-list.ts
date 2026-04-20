@@ -4,11 +4,20 @@ export type ClientPickerRow = {
   id: string;
   name: string;
   industry_vertical: string | null;
+  created_at?: string;
   sync_enabled?: boolean | null;
   has_smartlead_key?: boolean;
   has_heyreach_key?: boolean;
+  has_booking_link?: boolean;
   notes?: string | null;
 };
+
+function inferBookingLinkFromNotes(notes: string | null | undefined): boolean {
+  if (!notes || !notes.trim()) return false;
+  return /calendly\.com|\/meetings\/|book\.|schedule\.|hubspot\.com\/meetings|chilipiper|oncehub|youcanbook/i.test(
+    notes,
+  );
+}
 
 export async function listClientsPicker(): Promise<{
   clients: ClientPickerRow[];
@@ -22,7 +31,9 @@ export async function listClientsPicker(): Promise<{
 }> {
   const { data, error } = await supabase
     .from("clients")
-    .select("id, name, industry_vertical, sync_enabled, notes, smartlead_api_key_enc, heyreach_api_key_enc")
+    .select(
+      "id, name, industry_vertical, created_at, sync_enabled, notes, smartlead_api_key_enc, heyreach_api_key_enc",
+    )
     .order("name", { ascending: true });
 
   if (error) {
@@ -37,10 +48,12 @@ export async function listClientsPicker(): Promise<{
       id: c.id,
       name: c.name,
       industry_vertical: c.industry_vertical ?? null,
+      created_at: c.created_at,
       sync_enabled: c.sync_enabled ?? null,
       notes: c.notes ?? null,
       has_smartlead_key: Boolean(c.smartlead_api_key_enc),
       has_heyreach_key: Boolean(c.heyreach_api_key_enc),
+      has_booking_link: inferBookingLinkFromNotes(c.notes ?? null),
     })) satisfies ClientPickerRow[];
 
   const summary = {

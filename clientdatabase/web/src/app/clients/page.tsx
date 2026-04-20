@@ -12,10 +12,17 @@ interface ClientRow {
   sync_enabled?: boolean;
   has_smartlead_key?: boolean;
   has_heyreach_key?: boolean;
+  has_booking_link?: boolean;
 }
 
 export default function ClientsDirectoryPage() {
   const [clients, setClients] = useState<ClientRow[]>([]);
+  const [summary, setSummary] = useState<{
+    total: number;
+    active: number;
+    smartleadConnected: number;
+    heyreachConnected: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -25,8 +32,10 @@ export default function ClientsDirectoryPage() {
       const res = await fetch("/api/clients");
       const data = await res.json();
       setClients(data.clients ?? []);
+      setSummary(data.summary ?? null);
     } catch {
       setClients([]);
+      setSummary(null);
     } finally {
       setLoading(false);
     }
@@ -37,12 +46,13 @@ export default function ClientsDirectoryPage() {
   }, [load]);
 
   const stats = useMemo(() => {
+    if (summary) return summary;
     const total = clients.length;
     const active = clients.filter((c) => c.sync_enabled !== false).length;
     const smartleadConnected = clients.filter((c) => Boolean(c.has_smartlead_key)).length;
     const heyreachConnected = clients.filter((c) => Boolean(c.has_heyreach_key)).length;
     return { total, active, smartleadConnected, heyreachConnected };
-  }, [clients]);
+  }, [clients, summary]);
 
   const refresh = useCallback(async () => {
     if (refreshing) return;
@@ -78,10 +88,10 @@ export default function ClientsDirectoryPage() {
         </div>
 
         <div className="sg-stats-grid" style={{ marginBottom: 18 }}>
-          <StatTile label="Total clients" value={stats.total} />
-          <StatTile label="Active" value={stats.active} />
-          <StatTile label="SmartLead connected" value={stats.smartleadConnected} />
-          <StatTile label="HeyReach connected" value={stats.heyreachConnected} />
+          <StatTile label="TOTAL CLIENTS" value={stats.total} />
+          <StatTile label="ACTIVE" value={stats.active} highlight />
+          <StatTile label="SMARTLEAD CONNECTED" value={stats.smartleadConnected} />
+          <StatTile label="HEYREACH CONNECTED" value={stats.heyreachConnected} />
         </div>
 
         <div style={{ marginTop: 10 }}>
@@ -110,17 +120,23 @@ export default function ClientsDirectoryPage() {
               {clients.map((c) => (
                 <li key={c.id} className="sg-client-card">
                   <div style={{ minWidth: 0 }}>
-                    <Link href={`/clients/${c.id}`} className="sg-client-name">
-                      {c.name}
-                    </Link>
-                    <div className="sg-client-meta">
-                      <StatusPill ok={c.sync_enabled !== false} label={c.sync_enabled === false ? "inactive" : "active"} />
-                      {c.industry_vertical ? <span className="sg-client-vertical">{c.industry_vertical}</span> : null}
+                    <div className="sg-client-card-top">
+                      <Link href={`/clients/${c.id}`} className="sg-client-name">
+                        {c.name}
+                      </Link>
+                      <StatusPill ok={c.sync_enabled !== false} label="ACTIVE" />
                     </div>
-                    <div className="sg-client-checks">
+                    {c.industry_vertical ? (
+                      <div className="sg-client-vertical">{c.industry_vertical}</div>
+                    ) : null}
+                    <div className="sg-client-checks sg-client-checks-grid">
                       <Check ok={Boolean(c.has_smartlead_key)} label="SmartLead" />
+                      <Check ok={Boolean(c.has_booking_link)} label="Booking link" />
                       <Check ok={Boolean(c.has_heyreach_key)} label="HeyReach" />
                     </div>
+                    {c.created_at ? (
+                      <div className="sg-client-added">Added {formatAdded(c.created_at)}</div>
+                    ) : null}
                   </div>
                   <div className="sg-client-actions">
                     <Link href={`/contacts?client_id=${encodeURIComponent(c.id)}`} className="sg-link">
@@ -140,9 +156,9 @@ export default function ClientsDirectoryPage() {
   );
 }
 
-function StatTile({ label, value }: { label: string; value: number }) {
+function StatTile({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
   return (
-    <div className="sg-stat-tile">
+    <div className={`sg-stat-tile${highlight ? " sg-stat-tile-highlight" : ""}`}>
       <div className="sg-stat-label">{label}</div>
       <div className="sg-stat-value">{value.toLocaleString()}</div>
     </div>
@@ -164,4 +180,13 @@ function Check({ ok, label }: { ok: boolean; label: string }) {
       <span>{label}</span>
     </span>
   );
+}
+
+function formatAdded(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "numeric" });
+  } catch {
+    return iso;
+  }
 }
