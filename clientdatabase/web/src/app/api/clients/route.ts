@@ -7,11 +7,11 @@ import { listClientsPicker } from "@/lib/clients-list";
  * POST /api/clients — onboard a new client.
  */
 export async function GET() {
-  const { clients, error } = await listClientsPicker();
+  const { clients, summary, error } = await listClientsPicker();
   if (error) {
     return NextResponse.json({ error }, { status: 500 });
   }
-  return NextResponse.json({ clients });
+  return NextResponse.json({ clients, summary });
 }
 
 export async function POST(req: NextRequest) {
