@@ -21,12 +21,6 @@ function suggestionsForPath(pathname: string): string[] {
       "Can the AI bar set filters for me?",
     ];
   }
-  if (pathname.startsWith("/import")) {
-    return [
-      "How does Apollo diff save credits?",
-      "What is Prospeo enrichment?",
-    ];
-  }
   if (pathname.startsWith("/clients")) {
     return [
       "What API keys do I put on a client?",

@@ -9,7 +9,6 @@ import { ChipInput } from "@/components/campaign-tester/ChipInput";
 import { SIGNALS, getSignal } from "@/lib/campaign-tester/signals";
 import { getVariant } from "@/lib/campaign-tester/knowledge-base";
 import type {
-  ApolloFilters,
   BriefRecord,
   IcpDefinitionAxis,
   IcpRefinement,
@@ -31,7 +30,7 @@ export default function IcpModulePage() {
   const [step, setStep] = useState<Step>(1);
   const [icp, setIcp] = useState<IcpRefinement>({});
   const [signals, setSignals] = useState<string[]>([]);
-  const [apollo, setApollo] = useState<ApolloFilters>({});
+  const [leadFilters, setLeadFilters] = useState<Record<string, any>>({});
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -58,7 +57,7 @@ export default function IcpModulePage() {
         exclusions: b.icp_refinement?.exclusions ?? [],
       });
       setSignals(b.signals_selected ?? []);
-      setApollo(b.apollo_filters ?? {});
+      setLeadFilters(b.apollo_filters ?? {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load brief");
     } finally {
@@ -85,7 +84,7 @@ export default function IcpModulePage() {
         body: JSON.stringify({
           icp_refinement: icp,
           signals_selected: signals,
-          apollo_filters: apollo,
+          apollo_filters: leadFilters,
         }),
       });
       const data = await res.json();
@@ -98,7 +97,7 @@ export default function IcpModulePage() {
     }
   }
 
-  async function generateApolloFilters() {
+  async function generateLeadFilters() {
     if (!brief) return;
     setError(null);
     setGenerating(true);
@@ -117,13 +116,12 @@ export default function IcpModulePage() {
         throw new Error(data.error ?? "Failed to save refinement before generation");
       }
 
-      const res = await fetch(
-        `/api/campaign-tester/briefs/${briefId}/apollo-filters`,
-        { method: "POST" },
-      );
+      const res = await fetch(`/api/campaign-tester/briefs/${briefId}/lead-filters`, {
+        method: "POST",
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Filter generation failed");
-      setApollo(data.apollo_filters as ApolloFilters);
+      setLeadFilters(data.apollo_filters as Record<string, any>);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generation failed");
     } finally {
@@ -138,8 +136,8 @@ export default function IcpModulePage() {
       setStep(1);
       return;
     }
-    if (!apollo.job_titles?.length) {
-      setError("Step 3: generate the Apollo filter block before finishing Module 3.");
+    if (!Array.isArray(leadFilters.job_titles) || leadFilters.job_titles.length === 0) {
+      setError("Step 3: generate the lead filter block before finishing Module 3.");
       setStep(3);
       return;
     }
@@ -197,8 +195,7 @@ export default function IcpModulePage() {
         <div className="ct-header">
           <h1>Module 3 · ICP & list building</h1>
           <div className="ct-sub">
-            Tighten the ICP, pick the buying signals you can source, and generate the exact Apollo /
-            AI-Ark filter block.
+            Tighten the ICP, pick the buying signals you can source, and generate the exact lead filter block.
           </div>
         </div>
 
@@ -218,11 +215,11 @@ export default function IcpModulePage() {
           />
         )}
         {step === 3 && (
-          <ApolloFiltersStep
-            filters={apollo}
+          <LeadFiltersStep
+            filters={leadFilters}
             signalsSelected={signals}
             generating={generating}
-            onGenerate={generateApolloFilters}
+            onGenerate={generateLeadFilters}
             onBack={() => setStep(2)}
           />
         )}
@@ -240,8 +237,8 @@ export default function IcpModulePage() {
             <button
               className="btn btn-primary"
               onClick={finishModule}
-              disabled={saving || !apollo.job_titles?.length}
-              title={apollo.job_titles?.length ? "" : "Generate Apollo filters first"}
+              disabled={saving || !Array.isArray(leadFilters.job_titles) || leadFilters.job_titles.length === 0}
+              title={Array.isArray(leadFilters.job_titles) && leadFilters.job_titles.length > 0 ? "" : "Generate lead filters first"}
             >
               Save & unlock Module 4 →
             </button>
@@ -258,7 +255,7 @@ function StepTabs({ step, onChange }: { step: Step; onChange: (s: Step) => void 
   const steps: { n: Step; label: string }[] = [
     { n: 1, label: "ICP refinement" },
     { n: 2, label: "Signal selection" },
-    { n: 3, label: "Apollo filters" },
+    { n: 3, label: "Lead filters" },
   ];
   return (
     <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
@@ -507,46 +504,46 @@ function SignalSelectionStep({
 
 // ---- Step 3 body ----
 
-function ApolloFiltersStep({
+function LeadFiltersStep({
   filters,
   signalsSelected,
   generating,
   onGenerate,
   onBack,
 }: {
-  filters: ApolloFilters;
+  filters: Record<string, any>;
   signalsSelected: string[];
   generating: boolean;
   onGenerate: () => void;
   onBack: () => void;
 }) {
   const hasFilters = Boolean(
-    filters.job_titles?.length ||
-      filters.industries?.length ||
-      filters.keywords?.length,
+    (Array.isArray(filters.job_titles) && filters.job_titles.length) ||
+      (Array.isArray(filters.industries) && filters.industries.length) ||
+      (Array.isArray(filters.keywords) && filters.keywords.length),
   );
 
   // Keywords drive the real targeting. Display order reflects that: keywords
   // first, then the rest of the fields. Industries is intentionally last
-  // because Apollo's industry taxonomy is too coarse to target sharply.
+  // because industry taxonomies are often too coarse to target sharply.
   const rows: [string, string[] | string | undefined][] = [
-    ["KEYWORDS (industry-specific)", filters.keywords],
-    ["JOB TITLES", filters.job_titles],
-    ["EMPLOYEE COUNT", filters.employee_count],
-    ["GEOGRAPHY", filters.geography],
-    ["EXCLUDE", filters.exclude],
-    ["SIGNALS TO LAYER", filters.signals_to_layer],
-    ["INDUSTRIES (optional, imprecise)", filters.industries],
+    ["KEYWORDS (industry-specific)", filters.keywords as string[] | undefined],
+    ["JOB TITLES", filters.job_titles as string[] | undefined],
+    ["EMPLOYEE COUNT", filters.employee_count as string | undefined],
+    ["GEOGRAPHY", filters.geography as string[] | undefined],
+    ["EXCLUDE", filters.exclude as string[] | undefined],
+    ["SIGNALS TO LAYER", filters.signals_to_layer as string[] | undefined],
+    ["INDUSTRIES (optional, imprecise)", filters.industries as string[] | undefined],
   ];
   const visible = rows.filter(([, v]) => v && (Array.isArray(v) ? v.length : !!v));
 
   return (
     <div className="ct-card">
-      <h2>Step 3 — Apollo / AI-Ark filter spec</h2>
+      <h2>Step 3 — Lead filter spec</h2>
       <div className="ct-card-sub">
-        Claude grounds this strictly in your brief + refined ICP + selected signals. Targeting is
+        Gemini grounds this strictly in your brief + refined ICP + selected signals. Targeting is
         driven by <strong style={{ color: "var(--accent)" }}>industry-specific keywords</strong> —
-        terminology only people inside this industry use. Apollo&apos;s industry taxonomy is
+        terminology only people inside this industry use. Most industry taxonomies are
         deliberately de-emphasized.
       </div>
       <div style={{ marginBottom: 10 }}>
@@ -561,7 +558,7 @@ function ApolloFiltersStep({
 
       {visible.length === 0 ? (
         <div className="ct-pre" style={{ color: "var(--text-muted)" }}>
-          {"// Click Generate to produce the Apollo filter block."}
+          {"// Click Generate to produce the lead filter block."}
         </div>
       ) : (
         <pre className="ct-pre">
@@ -583,10 +580,9 @@ function ApolloFiltersStep({
             color: "var(--text-secondary)",
           }}
         >
-          <strong style={{ color: "var(--accent)" }}>Paste into Apollo:</strong> copy the{" "}
-          <span style={{ color: "var(--text-primary)" }}>KEYWORDS</span> block into Apollo&apos;s
-          Company or Contact keyword filter — it searches job titles, company descriptions, and
-          tech stack simultaneously. That is the sharpest lever Apollo has.
+          <strong style={{ color: "var(--accent)" }}>Operator note:</strong> copy the{" "}
+          <span style={{ color: "var(--text-primary)" }}>KEYWORDS</span> block into your lead database
+          keyword filter (title + company description + tech stack). That is the sharpest lever.
         </div>
       )}
 
@@ -633,6 +629,8 @@ function ApolloFiltersStep({
               {Object.entries(filters.sourcing_instructions).map(([id, instr]) => {
                 const sig = getSignal(id);
                 const name = sig?.label ?? id;
+                const safeInstr =
+                  typeof instr === "string" ? instr : JSON.stringify(instr);
                 return (
                   <div
                     key={id}
@@ -661,7 +659,7 @@ function ApolloFiltersStep({
                         fontSize: 12,
                       }}
                     >
-                      {instr}
+                      {safeInstr}
                     </div>
                   </div>
                 );
@@ -672,7 +670,7 @@ function ApolloFiltersStep({
 
       {signalsSelected.length === 0 && (
         <div className="ct-alert ct-alert-info" style={{ marginTop: 12 }}>
-          No signals selected — Claude will default to a cold-database sourcing note.
+          No signals selected — Gemini will default to a cold-database sourcing note.
         </div>
       )}
 

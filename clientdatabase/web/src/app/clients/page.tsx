@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppSidebar from "@/components/AppSidebar";
 
@@ -9,25 +9,60 @@ interface ClientRow {
   name: string;
   industry_vertical: string | null;
   created_at?: string;
+  sync_enabled?: boolean;
+  has_smartlead_key?: boolean;
+  has_heyreach_key?: boolean;
+  has_booking_link?: boolean;
 }
 
 export default function ClientsDirectoryPage() {
   const [clients, setClients] = useState<ClientRow[]>([]);
+  const [summary, setSummary] = useState<{
+    total: number;
+    active: number;
+    smartleadConnected: number;
+    heyreachConnected: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/clients");
+      const data = await res.json();
+      setClients(data.clients ?? []);
+      setSummary(data.summary ?? null);
+    } catch {
+      setClients([]);
+      setSummary(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/clients");
-        const data = await res.json();
-        setClients(data.clients ?? []);
-      } catch {
-        setClients([]);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+    void load();
+  }, [load]);
+
+  const stats = useMemo(() => {
+    if (summary) return summary;
+    const total = clients.length;
+    const active = clients.filter((c) => c.sync_enabled !== false).length;
+    const smartleadConnected = clients.filter((c) => Boolean(c.has_smartlead_key)).length;
+    const heyreachConnected = clients.filter((c) => Boolean(c.has_heyreach_key)).length;
+    return { total, active, smartleadConnected, heyreachConnected };
+  }, [clients, summary]);
+
+  const refresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load, refreshing]);
 
   return (
     <div className="app-layout">
@@ -36,53 +71,122 @@ export default function ClientsDirectoryPage() {
         <div className="ct-crumbs">
           <Link href="/">Home</Link> / Clients
         </div>
-        <div className="ct-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-          <div>
-            <h1>Clients</h1>
-            <div className="ct-sub">
-              Each client row in Supabase drives SmartLead / HeyReach sync. Add keys here instead of raw SQL.
-            </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+          <div className="ct-header" style={{ marginBottom: 0 }}>
+            <h1 style={{ marginBottom: 4 }}>SalesGlider AI Reply Handler</h1>
+            <div className="ct-sub">Client management + platform connections.</div>
           </div>
-          <Link href="/clients/new" className="btn btn-primary" style={{ textDecoration: "none" }}>
-            Add client
-          </Link>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button className="btn" type="button" onClick={refresh} disabled={loading || refreshing}>
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+            <Link href="/clients/new" className="btn btn-primary" style={{ textDecoration: "none" }}>
+              Add client
+            </Link>
+          </div>
         </div>
 
-        {loading ? (
-          <p style={{ color: "var(--text-muted)" }}>Loading…</p>
-        ) : clients.length === 0 ? (
-          <p style={{ color: "var(--text-muted)" }}>
-            No clients yet.{" "}
-            <Link href="/clients/new" style={{ color: "var(--accent)" }}>
-              Create one
-            </Link>
-            .
-          </p>
-        ) : (
-          <ul className="ct-list" style={{ maxWidth: 720 }}>
-            {clients.map((c) => (
-              <li key={c.id}>
-                <Link href={`/clients/${c.id}`} className="ct-list-label" style={{ textDecoration: "none", color: "inherit" }}>
-                  {c.name}
-                  {c.industry_vertical && (
-                    <span className="ct-list-sub" style={{ display: "block", marginTop: 4 }}>
-                      {c.industry_vertical}
-                    </span>
-                  )}
-                </Link>
-                <div style={{ display: "flex", gap: 10, fontSize: 12 }}>
-                  <Link href={`/contacts?client_id=${encodeURIComponent(c.id)}`} style={{ color: "var(--accent)" }}>
-                    Contacts
-                  </Link>
-                  <Link href={`/campaign-tester/new?client_id=${encodeURIComponent(c.id)}`} style={{ color: "var(--accent)" }}>
-                    New brief
+        <div className="sg-stats-grid" style={{ marginBottom: 18 }}>
+          <StatTile label="TOTAL CLIENTS" value={stats.total} />
+          <StatTile label="ACTIVE" value={stats.active} highlight />
+          <StatTile label="SMARTLEAD CONNECTED" value={stats.smartleadConnected} />
+          <StatTile label="HEYREACH CONNECTED" value={stats.heyreachConnected} />
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 10 }}>
+            Clients
+          </div>
+          {loading ? (
+            <div className="ct-card">
+              <div className="skeleton" style={{ width: "40%", marginBottom: 8 }} />
+              <div className="skeleton" style={{ width: "70%" }} />
+            </div>
+          ) : clients.length === 0 ? (
+            <div className="ct-card">
+              <div className="empty-state" style={{ padding: 28 }}>
+                <div className="empty-state-title">No clients yet</div>
+                <div>Add a client to connect SmartLead/HeyReach and start syncing.</div>
+                <div style={{ marginTop: 12 }}>
+                  <Link href="/clients/new" className="btn btn-primary" style={{ textDecoration: "none" }}>
+                    Add client
                   </Link>
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
+              </div>
+            </div>
+          ) : (
+            <ul className="sg-client-cards">
+              {clients.map((c) => (
+                <li key={c.id} className="sg-client-card">
+                  <div style={{ minWidth: 0 }}>
+                    <div className="sg-client-card-top">
+                      <Link href={`/clients/${c.id}`} className="sg-client-name">
+                        {c.name}
+                      </Link>
+                      <StatusPill ok={c.sync_enabled !== false} label="ACTIVE" />
+                    </div>
+                    {c.industry_vertical ? (
+                      <div className="sg-client-vertical">{c.industry_vertical}</div>
+                    ) : null}
+                    <div className="sg-client-checks sg-client-checks-grid">
+                      <Check ok={Boolean(c.has_smartlead_key)} label="SmartLead" />
+                      <Check ok={Boolean(c.has_booking_link)} label="Booking link" />
+                      <Check ok={Boolean(c.has_heyreach_key)} label="HeyReach" />
+                    </div>
+                    {c.created_at ? (
+                      <div className="sg-client-added">Added {formatAdded(c.created_at)}</div>
+                    ) : null}
+                  </div>
+                  <div className="sg-client-actions">
+                    <Link href={`/contacts?client_id=${encodeURIComponent(c.id)}`} className="sg-link">
+                      Contacts
+                    </Link>
+                    <Link href={`/campaign-tester/new?client_id=${encodeURIComponent(c.id)}`} className="sg-link">
+                      New campaign
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );
+}
+
+function StatTile({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+  return (
+    <div className={`sg-stat-tile${highlight ? " sg-stat-tile-highlight" : ""}`}>
+      <div className="sg-stat-label">{label}</div>
+      <div className="sg-stat-value">{value.toLocaleString()}</div>
+    </div>
+  );
+}
+
+function StatusPill({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span className={`sg-pill ${ok ? "sg-pill-ok" : "sg-pill-muted"}`}>
+      {label}
+    </span>
+  );
+}
+
+function Check({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span className={`sg-check ${ok ? "sg-check-ok" : "sg-check-missing"}`}>
+      <span aria-hidden>{ok ? "✓" : "—"}</span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function formatAdded(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "numeric" });
+  } catch {
+    return iso;
+  }
 }
