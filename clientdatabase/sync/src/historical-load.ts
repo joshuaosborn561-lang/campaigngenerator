@@ -17,6 +17,7 @@ import { Classifier } from "./services/classifier.js";
 import { InferenceService, enrichLeadFields } from "./services/inference.js";
 import { runInferenceForClient } from "./services/inference-runner.js";
 import { parseLocation } from "./utils/title-parser.js";
+import { computeLeadEngagementFlags } from "./utils/lead-engagement.js";
 import pLimit from "p-limit";
 import type { DBClient } from "./types/index.js";
 
@@ -140,6 +141,11 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
               console.log(`    ${leads.length} leads`);
               for (const slLead of leads) {
                         const sentiment = mapCategoryToSentiment(slLead.category);
+                        const engagement = computeLeadEngagementFlags({
+                          category: slLead.category,
+                          lead_status: slLead.lead_status,
+                          reply_sentiment: sentiment,
+                        });
                         const loc = parseLocation(
                           typeof slLead.location === "string" ? slLead.location : undefined
                         );
@@ -165,6 +171,9 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
                                     category: slLead.category,
                                     reply_sentiment: sentiment,
                                     meeting_booked: slLead.category === "meeting_booked",
+                                    has_replied: engagement.has_replied,
+                                    is_unsubscribed: engagement.is_unsubscribed,
+                                    is_hostile: engagement.is_hostile,
                         });
                         leadsSynced++;
               }

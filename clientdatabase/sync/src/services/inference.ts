@@ -1,6 +1,7 @@
 /**
  * Gemini 2.5 Flash structured inference: campaign-level offer profile,
  * per-variant offer angle, and ICP from lead samples.
+ * Campaign-level email understanding uses up to 25 distinct sequence variants (stratified sample).
  */
 
 import { createHash } from "node:crypto";
@@ -9,6 +10,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseDepartment, parseSeniority, normalizeCompanySize } from "../utils/title-parser.js";
 
 const MODEL = "gemini-2.5-flash";
+
+/** Max distinct emails (step+variant bodies) sent to Gemini for campaign-level offer/ICP email context */
+export const OFFER_EMAIL_SAMPLE_CAP = 25;
 
 export function hashSequenceSteps(
   rows: Array<{ subject_line: string | null; email_body: string | null; step_number: number; variant_label: string | null }>
@@ -31,6 +35,159 @@ export function hashStepContent(subject: string | null | undefined, body: string
     .update(`${(subject || "").trim()}\n${(body || "").trim()}`)
     .digest("hex");
 }
+
+/** Fingerprint for the specific ≤25 email bodies used in campaign-level Gemini calls */
+export function hashOfferEmailSample(
+  variants: Array<{ step_number: number; variant_label: string; subject: string; body: string }>
+): string {
+  const sorted = [...variants].sort((a, b) => {
+    if (a.step_number !== b.step_number) return a.step_number - b.step_number;
+    return a.variant_label.localeCompare(b.variant_label);
+  });
+  const payload = sorted
+    .map((v) => `${v.step_number}|${v.variant_label}|${v.subject.trim()}|${v.body.trim()}`)
+    .join("\n");
+  return createHash("sha256").update(payload).digest("hex");
+}
+
+/**
+ * Apollo / ZoomInfo–style dimensions for WHO the campaign targets (inferred from lead samples + copy).
+ * Values are best-effort from available data; use empty string / empty array when unknown.
+ */
+const APOLLO_STYLE_ICP_SIGNALS_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    technologies: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "Tech stack / tools associated with accounts (e.g. Salesforce, HubSpot) when inferable",
+    },
+    funding_stage: {
+      type: Type.STRING,
+      description: "Company funding or stage: bootstrapped, seed, series_a–c, pe, public — empty if unknown",
+    },
+    job_function: {
+      type: Type.STRING,
+      description: "Broader function bucket: Sales, Marketing, IT, HR, Finance, Operations — empty if mixed/unknown",
+    },
+    hq_location: {
+      type: Type.STRING,
+      description: "HQ region focus if distinct from person location (e.g. US HQ, EMEA HQ)",
+    },
+    person_keywords: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "Skills, topics, certifications on personas when visible in titles or enrichment",
+    },
+    buying_intent_topics: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "Intent or surge topics (hiring, migration, funding news) if inferable from samples",
+    },
+    naics_or_industry_code: {
+      type: Type.STRING,
+      description: "Industry taxonomy hint (NAICS/SIC/vertical label) — empty if unknown",
+    },
+    company_public_private: {
+      type: Type.STRING,
+      description: "public | private | unknown",
+    },
+    years_in_role: {
+      type: Type.STRING,
+      description: "Seniority tenure band if inferable (e.g. 'new in role', 'veteran') — empty if unknown",
+    },
+    education_summary: {
+      type: Type.STRING,
+      description: "Education level signal if ever present — usually empty",
+    },
+    employee_count_band: {
+      type: Type.STRING,
+      description: "Employee count bracket consistent with company_size_range (e.g. 51-200)",
+    },
+  },
+  required: [
+    "technologies",
+    "funding_stage",
+    "job_function",
+    "hq_location",
+    "person_keywords",
+    "buying_intent_topics",
+    "naics_or_industry_code",
+    "company_public_private",
+    "years_in_role",
+    "education_summary",
+    "employee_count_band",
+  ],
+};
+
+/**
+ * Same “Apollo-style” dimensions interpreted from OUTBOUND COPY (what the emails imply about targeting).
+ */
+const APOLLO_STYLE_EMAIL_SIGNALS_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    technologies: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "Tools/platforms explicitly mentioned in copy",
+    },
+    funding_stage: {
+      type: Type.STRING,
+      description: "Stage language in copy (e.g. 'fast-growing', 'PE-backed') — empty if none",
+    },
+    job_function: {
+      type: Type.STRING,
+      description: "Function the copy speaks to (Sales, RevOps, IT) — empty if broad",
+    },
+    hq_location: {
+      type: Type.STRING,
+      description: "Geo or HQ references in copy",
+    },
+    person_keywords: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "Role skills or topics referenced in copy",
+    },
+    buying_intent_topics: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "Triggers in copy (hiring, migration, compliance deadline)",
+    },
+    naics_or_industry_code: {
+      type: Type.STRING,
+      description: "Named verticals/industries in copy",
+    },
+    company_public_private: {
+      type: Type.STRING,
+      description: "public | private | unknown from copy",
+    },
+    years_in_role: {
+      type: Type.STRING,
+      description: "Tenure hints in copy — empty if none",
+    },
+    education_summary: {
+      type: Type.STRING,
+      description: "Education references — usually empty",
+    },
+    employee_count_band: {
+      type: Type.STRING,
+      description: "Company size language in copy (headcount bands)",
+    },
+  },
+  required: [
+    "technologies",
+    "funding_stage",
+    "job_function",
+    "hq_location",
+    "person_keywords",
+    "buying_intent_topics",
+    "naics_or_industry_code",
+    "company_public_private",
+    "years_in_role",
+    "education_summary",
+    "employee_count_band",
+  ],
+};
 
 const OFFER_PROFILE_SCHEMA = {
   type: Type.OBJECT,
@@ -80,6 +237,7 @@ const OFFER_PROFILE_SCHEMA = {
       type: Type.STRING,
       description: "reply | calendar | call | resource | meeting | other",
     },
+    apollo_style_email_signals: APOLLO_STYLE_EMAIL_SIGNALS_SCHEMA,
     confidence: {
       type: Type.STRING,
       enum: ["high", "medium", "low"],
@@ -98,6 +256,7 @@ const OFFER_PROFILE_SCHEMA = {
     "risk_reversal_summary",
     "approximate_word_count_band",
     "primary_cta",
+    "apollo_style_email_signals",
     "confidence",
   ],
 };
@@ -143,6 +302,7 @@ const VARIANT_ANGLE_SCHEMA = {
       items: { type: Type.STRING },
       description: "e.g. case study, stat, named client, competitor mention",
     },
+    apollo_style_email_signals: APOLLO_STYLE_EMAIL_SIGNALS_SCHEMA,
     confidence: { type: Type.STRING, enum: ["high", "medium", "low"] },
   },
   required: [
@@ -159,6 +319,7 @@ const VARIANT_ANGLE_SCHEMA = {
     "risk_reversal",
     "cta_type",
     "assets_used",
+    "apollo_style_email_signals",
     "confidence",
   ],
 };
@@ -195,6 +356,7 @@ const ICP_SCHEMA = {
     industry_secondary: { type: Type.STRING, description: "Secondary industry or empty string if none" },
     company_size_range: { type: Type.STRING },
     revenue_band: { type: Type.STRING, description: "Typical company revenue band if inferable from samples" },
+    apollo_style_icp_signals: APOLLO_STYLE_ICP_SIGNALS_SCHEMA,
     sample_notes: { type: Type.STRING, description: "One concrete sentence, e.g. 'Mostly Owners at small MSPs in Texas'" },
     confidence: { type: Type.STRING, enum: ["high", "medium", "low"] },
   },
@@ -210,6 +372,7 @@ const ICP_SCHEMA = {
     "industry_secondary",
     "company_size_range",
     "revenue_band",
+    "apollo_style_icp_signals",
     "sample_notes",
     "confidence",
   ],
@@ -218,6 +381,8 @@ const ICP_SCHEMA = {
 export type LeadSample = {
   title: string | null;
   company: string | null;
+  company_domain: string | null;
+  linkedin_url: string | null;
   industry: string | null;
   company_size: string | null;
   company_revenue: string | null;
@@ -226,6 +391,17 @@ export type LeadSample = {
   city: string | null;
   state: string | null;
   country: string | null;
+  timezone: string | null;
+  has_replied: boolean | null;
+  is_unsubscribed: boolean | null;
+  is_hostile: boolean | null;
+};
+
+export type EmailVariantInput = {
+  step_number: number;
+  variant_label: string;
+  subject: string;
+  body: string;
 };
 
 export class InferenceService {
@@ -237,29 +413,33 @@ export class InferenceService {
 
   async inferOfferProfileAcrossVariants(
     campaignName: string,
-    variants: Array<{ step_number: number; variant_label: string; subject: string; body: string }>
+    variants: EmailVariantInput[],
+    meta: { total_variants_in_campaign: number; sampled_for_gemini: number }
   ): Promise<Record<string, unknown>> {
     const lines = variants
       .map(
-        (v) =>
-          `--- Step ${v.step_number} variant ${v.variant_label} ---\nSubject: ${v.subject}\n\nBody:\n${v.body}`
+        (v, idx) =>
+          `--- Email ${idx + 1}/${variants.length} — Step ${v.step_number} variant ${v.variant_label} ---\nSubject: ${v.subject}\n\nBody:\n${v.body}`
       )
       .join("\n\n");
 
-    const prompt = `You are analyzing ALL variants/steps of one cold outbound campaign (email and/or LinkedIn sequences combined).
+    const prompt = `You are analyzing a STRATIFIED SAMPLE of up to ${OFFER_EMAIL_SAMPLE_CAP} distinct outbound messages from one campaign (email and/or LinkedIn).
 Campaign name: ${campaignName}
+Total sequence variants in this campaign (all steps × A/B): ${meta.total_variants_in_campaign}.
+This prompt contains ${meta.sampled_for_gemini} sampled messages — use them as representative of the full sequence.
 
 ${lines}
 
-Infer the overall offer strategy across the sequence. Fill every schema field; use empty string or false when absent.
+Infer the overall offer strategy. Fill every schema field; use empty string, empty arrays, or false when absent.
 
 Cover explicitly:
 - Concrete incentive (what they get) and separately "why respond now" (urgency, deadline, scarcity, timely trigger).
 - Whether copy looks AI-enriched (hyper-personalization, "noticed your post", obvious merge tricks) — yes/no/mixed plus a short example line if any.
-- After the core offer/incentive, what the copy usually talks about next (pain story, peer proof, metrics, question) — post_offer_hook_pattern.
+- After the core offer/incentive, what the copy usually talks about next — post_offer_hook_pattern.
 - Social proof: style plus named case study/customer, metrics, ROI or % claims if present.
 - Risk reversal: guarantees, pilots, opt-outs, low-commitment framing.
 - Length band (first touch vs follow-ups if different) and primary CTA style.
+- apollo_style_email_signals: ten B2B-database-style dimensions IMPLIED BY THE COPY (technologies mentioned, funding/stage language, job function spoken to, HQ/geo, person keywords, intent triggers, industry/vertical, public vs private, tenure hints, headcount language). Use empty values when not present.
 
 Return ONLY JSON matching the schema.`;
 
@@ -303,6 +483,7 @@ Decompose this message:
 - Social proof: named case/customer and specific metrics or ROI if any.
 - Risk reversal language if any.
 - Main pain, CTA, hook_style, and assets_used (case study, stats, etc.).
+- apollo_style_email_signals: same ten dimensions as in campaign-level, but ONLY what appears in THIS message.
 
 Return ONLY JSON matching the schema.`;
 
@@ -328,36 +509,43 @@ Return ONLY JSON matching the schema.`;
     leads: LeadSample[]
   ): Promise<Record<string, unknown>> {
     const offerBit = offerProfileJson
-      ? `\nKnown offer profile (from copy): ${JSON.stringify(offerProfileJson)}\n`
+      ? `\nKnown offer profile (from email sample): ${JSON.stringify(offerProfileJson)}\n`
       : "";
 
     const rows = leads.map((l, i) => ({
       i: i + 1,
       title: l.title,
       company: l.company,
+      company_domain: l.company_domain,
+      linkedin_url: l.linkedin_url,
       industry: l.industry,
       company_size: l.company_size,
       revenue: l.company_revenue,
       seniority: l.seniority,
       department: l.department,
       location: [l.city, l.state, l.country].filter(Boolean).join(", ") || null,
+      timezone: l.timezone,
+      has_replied: l.has_replied,
+      is_unsubscribed: l.is_unsubscribed,
+      is_hostile: l.is_hostile,
     }));
 
-    const prompt = `You're inferring the REAL target ICP for this outbound campaign from a random sample of ${leads.length} leads (all leads if fewer than 25 were available).
+    const prompt = `You're inferring the REAL target ICP for this outbound campaign from a random sample of ${leads.length} leads/prospects (max 25; fewer if not enough rows in the database).
 
 Campaign name: ${campaignName}
 ${offerBit}
 Lead sample (JSON): ${JSON.stringify(rows, null, 2)}
 
-Each lead row may include: title, company, industry, company_size, revenue, seniority, department (org function e.g. sales, hr), location fields.
+ICP factors are identified from:
+- Structured fields on each row (title, seniority, department, company, industry, size, revenue, location, domain, engagement flags).
+- Heuristic seniority/department may be pre-filled from job title parsing.
+- apollo_style_icp_signals: infer ten B2B-database-style dimensions (technologies, funding stage, job function, HQ vs person geo, persona keywords, buying intent, NAICS/vertical, public/private, years in role, education, employee band) from whatever the data supports — use empty strings/arrays when unknown.
 
 Produce a structured ICP that covers:
-- title_patterns and seniority_focus from the data
-- departments: org functions (sales, hr, marketing, …) — use title + department field; org_functions_note for nuance
-- company_profile: who these companies are (segment, typical account type)
-- geography_summary plus primary_locations (deduped cities/regions/countries from samples)
-- industry_primary, industry_secondary, company_size_range, revenue_band
-- sample_notes: one concrete sentence; confidence
+- title_patterns, seniority_focus, departments, org_functions_note, company_profile
+- geography_summary, primary_locations, industry_primary, industry_secondary, company_size_range, revenue_band
+- apollo_style_icp_signals (required object)
+- sample_notes and confidence
 
 Be specific. If titles cluster (e.g. Owners at MSPs in Texas), say that. Do not generalize to "IT decision-makers" unless the data supports it.
 Return ONLY JSON matching the schema.`;
@@ -374,7 +562,7 @@ Return ONLY JSON matching the schema.`;
     const text = response.text ?? "{}";
     return JSON.parse(text.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim()) as Record<
       string,
-    unknown
+      unknown
     >;
   }
 }
@@ -399,21 +587,99 @@ export function enrichLeadFields(lead: {
 
 const SAMPLE_SIZE = 25;
 
+function shuffle<T>(arr: T[]): T[] {
+  return [...arr].sort(() => Math.random() - 0.5);
+}
+
+function sortVariantsStable<T extends { variant_label: string | null }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => (a.variant_label || "A").localeCompare(b.variant_label || "A"));
+}
+
+/**
+ * Pick up to `cap` distinct outbound messages: prefer step 1, spread across steps,
+ * include at most one variant per (step, first line of body) to diversify.
+ */
+export function pickEmailSampleForInference(
+  steps: Array<{
+    step_number: number;
+    variant_label: string | null;
+    subject_line: string | null;
+    email_body: string | null;
+  }>,
+  cap: number = OFFER_EMAIL_SAMPLE_CAP
+): EmailVariantInput[] {
+  type Row = (typeof steps)[0];
+  const withBody = steps.filter((s) => (s.email_body || "").trim().length > 0);
+  if (withBody.length === 0) return [];
+
+  const byStep = new Map<number, Row[]>();
+  for (const s of withBody) {
+    const list = byStep.get(s.step_number) ?? [];
+    list.push(s);
+    byStep.set(s.step_number, list);
+  }
+
+  const stepNums = [...byStep.keys()].sort((a, b) => a - b);
+  const queues = stepNums.map((sn) => sortVariantsStable(byStep.get(sn) ?? []));
+  const picked: EmailVariantInput[] = [];
+  const seenBodyPrefix = new Set<string>();
+
+  const pushVariant = (s: Row) => {
+    if (picked.length >= cap) return;
+    const body = (s.email_body || "").trim();
+    const subj = (s.subject_line || "").trim();
+    const fingerprint = `${s.step_number}|${body.slice(0, 120)}`;
+    if (seenBodyPrefix.has(fingerprint)) return;
+    seenBodyPrefix.add(fingerprint);
+    picked.push({
+      step_number: s.step_number,
+      variant_label: s.variant_label || "A",
+      subject: subj,
+      body,
+    });
+  };
+
+  // Interleave steps (1st email from step 1, then step 2, …) up to cap — approximates stratified sample
+  let idx = 0;
+  while (picked.length < cap) {
+    let advanced = false;
+    for (const q of queues) {
+      if (picked.length >= cap) break;
+      if (idx < q.length) {
+        pushVariant(q[idx]);
+        advanced = true;
+      }
+    }
+    idx++;
+    if (!advanced) break;
+    if (idx > 200) break;
+  }
+
+  return picked.sort((a, b) => {
+    if (a.step_number !== b.step_number) return a.step_number - b.step_number;
+    return a.variant_label.localeCompare(b.variant_label);
+  });
+}
+
 export async function pickRandomLeadSamples(
   db: SupabaseClient,
   campaignId: string
 ): Promise<LeadSample[]> {
   const { data: leadRows, error: leadErr } = await db
     .from("leads")
-    .select("title, company, industry, company_size, company_revenue, seniority, department, city, state, country")
+    .select(
+      "title, company, industry, company_size, company_revenue, seniority, department, city, state, country, has_replied, is_unsubscribed, is_hostile"
+    )
     .eq("campaign_id", campaignId);
 
   if (!leadErr && leadRows && leadRows.length > 0) {
-    const shuffled = [...leadRows].sort(() => Math.random() - 0.5);
+    const shuffled = shuffle(leadRows);
     const picked = shuffled.slice(0, Math.min(SAMPLE_SIZE, shuffled.length));
     return picked.map((r) => ({
       title: r.title,
       company: r.company,
+      company_domain: null,
+      linkedin_url: null,
       industry: r.industry,
       company_size: r.company_size,
       company_revenue: r.company_revenue,
@@ -422,42 +688,79 @@ export async function pickRandomLeadSamples(
       city: r.city,
       state: r.state,
       country: r.country,
+      timezone: null,
+      has_replied: r.has_replied ?? null,
+      is_unsubscribed: r.is_unsubscribed ?? null,
+      is_hostile: r.is_hostile ?? null,
     }));
   }
 
-  // HeyReach-heavy flows: prospects may only exist on `contacts` via contact_campaigns
   const { data: links, error: linkErr } = await db
     .from("contact_campaigns")
-    .select("contact_id")
+    .select("contact_id, lead_id")
     .eq("campaign_id", campaignId);
 
   if (linkErr || !links?.length) return [];
 
-  const ids = [...new Set(links.map((l) => l.contact_id).filter(Boolean))] as string[];
-  if (ids.length === 0) return [];
+  const contactIds = [...new Set(links.map((l) => l.contact_id).filter(Boolean))] as string[];
+  if (contactIds.length === 0) return [];
 
   const { data: contacts, error: cErr } = await db
     .from("contacts")
     .select(
-      "title, company_name, company_industry, company_size, company_revenue, seniority, department, city, state, country"
+      "id, title, company_name, company_domain, linkedin_url, company_industry, company_size, company_revenue, seniority, department, city, state, country, timezone, is_unsubscribed, is_hostile_opt_out, overall_status"
     )
-    .in("id", ids);
+    .in("id", contactIds);
 
   if (cErr || !contacts?.length) return [];
 
-  const flat: LeadSample[] = contacts.map((contact) => ({
-    title: contact.title,
-    company: contact.company_name,
-    industry: contact.company_industry,
-    company_size: contact.company_size,
-    company_revenue: contact.company_revenue,
-    seniority: contact.seniority,
-    department: contact.department,
-    city: contact.city,
-    state: contact.state,
-    country: contact.country,
-  }));
+  const leadIds = [...new Set(links.map((l) => l.lead_id).filter(Boolean))] as string[];
+  const leadById = new Map<string, { has_replied?: boolean; is_unsubscribed?: boolean; is_hostile?: boolean }>();
+  if (leadIds.length > 0) {
+    const { data: leadRows } = await db
+      .from("leads")
+      .select("id, has_replied, is_unsubscribed, is_hostile")
+      .in("id", leadIds);
+    for (const row of leadRows ?? []) {
+      leadById.set(row.id, {
+        has_replied: row.has_replied,
+        is_unsubscribed: row.is_unsubscribed,
+        is_hostile: row.is_hostile,
+      });
+    }
+  }
 
-  const shuffled = [...flat].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, Math.min(SAMPLE_SIZE, shuffled.length));
+  const leadByContact = new Map<string, { has_replied?: boolean; is_unsubscribed?: boolean; is_hostile?: boolean }>();
+  for (const link of links) {
+    if (!link.contact_id || !link.lead_id) continue;
+    const lf = leadById.get(link.lead_id);
+    if (lf) leadByContact.set(link.contact_id, lf);
+  }
+
+  const flat: LeadSample[] = contacts.map((contact) => {
+    const fromLead = leadByContact.get(contact.id);
+    const replied =
+      fromLead?.has_replied ??
+      (contact.overall_status === "replied" || contact.overall_status === "meeting_booked" ? true : null);
+    return {
+      title: contact.title,
+      company: contact.company_name,
+      company_domain: contact.company_domain,
+      linkedin_url: contact.linkedin_url,
+      industry: contact.company_industry,
+      company_size: contact.company_size,
+      company_revenue: contact.company_revenue,
+      seniority: contact.seniority,
+      department: contact.department,
+      city: contact.city,
+      state: contact.state,
+      country: contact.country,
+      timezone: contact.timezone,
+      has_replied: replied,
+      is_unsubscribed: fromLead?.is_unsubscribed ?? contact.is_unsubscribed ?? null,
+      is_hostile: fromLead?.is_hostile ?? contact.is_hostile_opt_out ?? null,
+    };
+  });
+
+  return shuffle(flat).slice(0, Math.min(SAMPLE_SIZE, flat.length));
 }

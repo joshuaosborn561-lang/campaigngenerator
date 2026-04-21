@@ -203,6 +203,9 @@ export class SupabaseStore {
         category?: string;
         reply_sentiment?: string;
         meeting_booked?: boolean;
+        has_replied?: boolean;
+        is_unsubscribed?: boolean;
+        is_hostile?: boolean;
   }) {
         const { data, error } = await this.db
           .from("leads")
@@ -319,6 +322,8 @@ export class SupabaseStore {
         source_list?: string;
         overall_status?: string;
         meeting_booked?: boolean;
+        is_unsubscribed?: boolean;
+        is_hostile_opt_out?: boolean;
   }) {
         // Normalize identifiers. A contact needs at least one — either
         // email (preferred, strong key) or linkedin_url (fallback for

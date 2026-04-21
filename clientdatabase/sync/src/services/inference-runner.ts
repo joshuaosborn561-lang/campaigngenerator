@@ -5,8 +5,11 @@
 import type { SupabaseStore } from "./supabase-store.js";
 import {
   InferenceService,
+  hashOfferEmailSample,
   hashSequenceSteps,
   hashStepContent,
+  OFFER_EMAIL_SAMPLE_CAP,
+  pickEmailSampleForInference,
   pickRandomLeadSamples,
 } from "./inference.js";
 
@@ -21,9 +24,12 @@ const OFFER_PROFILE_V2_KEYS = [
   "risk_reversal_summary",
 ] as const;
 
+const OFFER_PROFILE_V3_KEYS = ["apollo_style_email_signals"] as const;
+
 function offerProfileNeedsRefresh(p: Record<string, unknown> | null): boolean {
   if (!p) return true;
-  return OFFER_PROFILE_V2_KEYS.some((k) => !(k in p));
+  if (OFFER_PROFILE_V2_KEYS.some((k) => !(k in p))) return true;
+  return OFFER_PROFILE_V3_KEYS.some((k) => !(k in p));
 }
 
 const VARIANT_ANGLE_V2_KEYS = [
@@ -35,18 +41,23 @@ const VARIANT_ANGLE_V2_KEYS = [
   "risk_reversal",
 ] as const;
 
+const VARIANT_ANGLE_V3_KEYS = ["apollo_style_email_signals"] as const;
+
 function variantAngleNeedsRefresh(angle: unknown): boolean {
   if (!angle || typeof angle !== "object") return true;
   const o = angle as Record<string, unknown>;
-  return VARIANT_ANGLE_V2_KEYS.some((k) => !(k in o));
+  if (VARIANT_ANGLE_V2_KEYS.some((k) => !(k in o))) return true;
+  return VARIANT_ANGLE_V3_KEYS.some((k) => !(k in o));
 }
 
 const ICP_V2_KEYS = ["org_functions_note", "company_profile", "primary_locations"] as const;
+const ICP_V3_KEYS = ["apollo_style_icp_signals"] as const;
 
 function icpNeedsRefresh(icp: unknown): boolean {
   if (!icp || typeof icp !== "object") return true;
   const o = icp as Record<string, unknown>;
-  return ICP_V2_KEYS.some((k) => !(k in o));
+  if (ICP_V2_KEYS.some((k) => !(k in o))) return true;
+  return ICP_V3_KEYS.some((k) => !(k in o));
 }
 
 export async function runInferenceForClient(
@@ -95,7 +106,7 @@ async function runInferenceForCampaign(
 
   const { data: campaignRow } = await store.client
     .from("campaigns")
-    .select("sequence_fingerprint, inferred_at, inferred_icp, gemini_offer_profile")
+    .select("sequence_fingerprint, inferred_at, inferred_icp, gemini_offer_profile, offer_sample_fingerprint")
     .eq("id", campaignId)
     .single();
 
@@ -117,18 +128,24 @@ async function runInferenceForCampaign(
       ? (campaignRow.gemini_offer_profile as Record<string, unknown>)
       : null;
 
-  const variantsForProfile = steps.map((s) => ({
-    step_number: s.step_number,
-    variant_label: s.variant_label || "A",
-    subject: s.subject_line || "",
-    body: s.email_body || "",
-  }));
+  const emailSample = pickEmailSampleForInference(steps, OFFER_EMAIL_SAMPLE_CAP);
+  const sampleFp = hashOfferEmailSample(emailSample);
+  const storedSampleFp = campaignRow?.offer_sample_fingerprint as string | undefined;
 
-  if (sequenceChanged || !offerProfile || offerProfileNeedsRefresh(offerProfile)) {
+  const needsOfferRefresh =
+    sequenceChanged ||
+    !offerProfile ||
+    offerProfileNeedsRefresh(offerProfile) ||
+    storedSampleFp !== sampleFp;
+
+  if (needsOfferRefresh && emailSample.length > 0) {
     console.log(
-      `[inference][${clientName}] Campaign "${campaignName}": offer profile (${steps.length} variants, seq changed=${sequenceChanged})`
+      `[inference][${clientName}] Campaign "${campaignName}": offer profile from ${emailSample.length}/${steps.length} sampled emails (seq changed=${sequenceChanged}, sample fp match=${storedSampleFp === sampleFp})`
     );
-    offerProfile = await inference.inferOfferProfileAcrossVariants(campaignName, variantsForProfile);
+    offerProfile = await inference.inferOfferProfileAcrossVariants(campaignName, emailSample, {
+      total_variants_in_campaign: steps.length,
+      sampled_for_gemini: emailSample.length,
+    });
     if (DRY) {
       console.log(`[inference][DRY] offer profile:`, JSON.stringify(offerProfile));
     } else {
@@ -136,6 +153,17 @@ async function runInferenceForCampaign(
         .from("campaigns")
         .update({
           gemini_offer_profile: offerProfile,
+          sequence_fingerprint: fp,
+          offer_sample_fingerprint: sampleFp,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", campaignId);
+    }
+  } else if (sequenceChanged && emailSample.length === 0) {
+    if (!DRY) {
+      await store.client
+        .from("campaigns")
+        .update({
           sequence_fingerprint: fp,
           updated_at: new Date().toISOString(),
         })
