@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppSidebar from "@/components/AppSidebar";
+import { BRAND_PRIMARY, BRAND_SECONDARY, BRAND_TAGLINE } from "@/lib/branding";
 
 interface ClientRow {
   id: string;
@@ -86,10 +87,11 @@ export default function HomePage() {
               </div>
               <div>
                 <h1 className="rh-dash-title">
-                  <span className="rh-dash-title-brand">SalesGlider.ai</span>{" "}
-                  <span className="rh-dash-title-sub">Agency Intelligence</span>
+                  <span className="rh-dash-title-brand">{BRAND_PRIMARY}</span>
+                  <span className="rh-dash-title-sep"> </span>
+                  <span className="rh-dash-title-sub">{BRAND_SECONDARY}</span>
                 </h1>
-                <p className="rh-dash-tagline">Client management and platform connections.</p>
+                <p className="rh-dash-tagline">{BRAND_TAGLINE}</p>
               </div>
             </div>
             <div className="rh-dash-actions">

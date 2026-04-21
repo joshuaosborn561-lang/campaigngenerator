@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import GuideChatWidget from "@/components/GuideChatWidget";
+import { BRAND_PAGE_TITLE } from "@/lib/branding";
 
 export const metadata: Metadata = {
-  title: "SalesGlider.ai — Agency Intelligence",
+  title: BRAND_PAGE_TITLE,
   description: "Contact search and campaign analytics for your outbound agency",
 };
 

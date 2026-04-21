@@ -1540,7 +1540,7 @@ input[type="checkbox"] {
   margin-bottom: 8px;
 }
 
-/* ===== Reply Handler main dashboard (home + clients) ===== */
+/* ===== Agency Intelligence main dashboard (home + clients) ===== */
 .rh-dash {
   min-height: 100%;
   background: var(--bg-primary);
@@ -1590,9 +1590,14 @@ input[type="checkbox"] {
   color: var(--text-primary);
 }
 
+.rh-dash-title-sep {
+  /* keeps ".ai" + "Agency" from awkward wrap */
+  white-space: nowrap;
+}
+
 .rh-dash-title-sub {
-  font-weight: 500;
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .rh-dash-tagline {
