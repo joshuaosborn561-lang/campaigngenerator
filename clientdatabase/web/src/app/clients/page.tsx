@@ -74,7 +74,10 @@ export default function ClientsDirectoryPage() {
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
           <div className="ct-header" style={{ marginBottom: 0 }}>
-            <h1 style={{ marginBottom: 4 }}>SalesGlider AI Reply Handler</h1>
+            <h1 style={{ marginBottom: 4 }}>
+              <span style={{ fontWeight: 700 }}>SalesGlider.ai</span>{" "}
+              <span style={{ fontWeight: 500, color: "var(--text-secondary)" }}>Agency Intelligence</span>
+            </h1>
             <div className="ct-sub">Client management + platform connections.</div>
           </div>
           <div style={{ display: "flex", gap: 10 }}>

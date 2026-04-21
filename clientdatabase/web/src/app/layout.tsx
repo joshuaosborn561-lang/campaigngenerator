@@ -3,7 +3,7 @@ import "./globals.css";
 import GuideChatWidget from "@/components/GuideChatWidget";
 
 export const metadata: Metadata = {
-  title: "Agency Intelligence Platform",
+  title: "SalesGlider.ai — Agency Intelligence",
   description: "Contact search and campaign analytics for your outbound agency",
 };
 

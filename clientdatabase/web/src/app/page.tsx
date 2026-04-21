@@ -86,7 +86,8 @@ export default function HomePage() {
               </div>
               <div>
                 <h1 className="rh-dash-title">
-                  SalesGlider <span className="rh-dash-title-sub">AI Reply Handler</span>
+                  <span className="rh-dash-title-brand">SalesGlider.ai</span>{" "}
+                  <span className="rh-dash-title-sub">Agency Intelligence</span>
                 </h1>
                 <p className="rh-dash-tagline">Client management and platform connections.</p>
               </div>

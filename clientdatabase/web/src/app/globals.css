@@ -1585,6 +1585,11 @@ input[type="checkbox"] {
   color: var(--text-primary);
 }
 
+.rh-dash-title-brand {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
 .rh-dash-title-sub {
   font-weight: 500;
   color: var(--text-secondary);
