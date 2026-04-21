@@ -14,13 +14,6 @@ function suggestionsForPath(pathname: string): string[] {
       "When is Claude / Anthropic used?",
     ];
   }
-  if (pathname.startsWith("/contacts")) {
-    return [
-      "How do filters work on this page?",
-      "How do I export CSV?",
-      "Can the AI bar set filters for me?",
-    ];
-  }
   if (pathname.startsWith("/clients")) {
     return [
       "What API keys do I put on a client?",
@@ -31,6 +24,8 @@ function suggestionsForPath(pathname: string): string[] {
     return [
       "What can I ask the AI analyst?",
       "Does this use live warehouse data?",
+      "How do prospect filters work?",
+      "How do I export prospects to CSV?",
     ];
   }
   return [

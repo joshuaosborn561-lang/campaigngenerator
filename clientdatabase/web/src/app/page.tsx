@@ -154,8 +154,8 @@ export default function HomePage() {
                         )}
                       </div>
                       <div className="sg-client-actions">
-                        <Link href={`/contacts?client_id=${encodeURIComponent(c.id)}`} className="sg-link">
-                          Contacts
+                        <Link href={`/chat?view=contacts&client_id=${encodeURIComponent(c.id)}`} className="sg-link">
+                          Prospects
                         </Link>
                         <Link href={`/campaign-tester/new?client_id=${encodeURIComponent(c.id)}`} className="sg-link">
                           New campaign
@@ -172,7 +172,7 @@ export default function HomePage() {
 
             <p className="rh-quick-links">
               Quick links:{" "}
-              <Link href="/contacts">Contacts</Link>
+              <Link href="/chat?view=contacts">Prospects</Link>
               {" · "}
               <Link href="/chat">AI analyst</Link>
               {" · "}

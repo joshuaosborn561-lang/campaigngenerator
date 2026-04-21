@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect, FormEvent } from "react";
+import { Suspense, useState, useRef, useEffect, FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/AppSidebar";
+import { ContactsWorkspace } from "@/components/contacts-workspace";
 import ReactMarkdown from "react-markdown";
 
 interface Message {
@@ -17,7 +19,28 @@ const SUGGESTIONS = [
   "How many meetings have we booked this quarter by industry?",
 ];
 
-export default function ChatPage() {
+type AnalystTab = "ask" | "contacts";
+
+function ChatPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const viewParam = searchParams.get("view");
+  const initialTab: AnalystTab = viewParam === "contacts" ? "contacts" : "ask";
+  const [tab, setTab] = useState<AnalystTab>(initialTab);
+
+  useEffect(() => {
+    setTab(viewParam === "contacts" ? "contacts" : "ask");
+  }, [viewParam]);
+
+  function setAnalystTab(next: AnalystTab) {
+    setTab(next);
+    const qs = new URLSearchParams(searchParams.toString());
+    if (next === "contacts") qs.set("view", "contacts");
+    else qs.delete("view");
+    const s = qs.toString();
+    router.replace(s ? `/chat?${s}` : "/chat");
+  }
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -48,9 +71,9 @@ export default function ChatPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setMessages([...next, { role: "assistant", content: data.response || "(no response)" }]);
-    } catch (err: any) {
-      setError(err.message || "Failed to get response");
-      // Roll the user message back so they can edit and resend
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to get response";
+      setError(msg);
       setMessages(messages);
       setInput(trimmed);
     } finally {
@@ -78,18 +101,47 @@ export default function ChatPage() {
     inputRef.current?.focus();
   }
 
+  if (tab === "contacts") {
+    return (
+      <ContactsWorkspace
+        sidebarActive="chat"
+        basePath="/chat"
+        onBackToAsk={() => setAnalystTab("ask")}
+      />
+    );
+  }
+
   return (
     <div className="app-layout">
       <AppSidebar active="chat" />
 
-      {/* Main */}
       <div className="content-area">
-        <div className="top-bar">
-          <div style={{ flex: 1 }}>
+        <div className="top-bar" style={{ flexWrap: "wrap", gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
             <h1 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>AI Analyst</h1>
             <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--text-muted)" }}>
-              Ask Gemini questions about your campaigns, subject lines, reply rates, offer types — it queries Supabase directly
+              Ask Gemini about campaigns — or open <strong>Prospects</strong> to search people synced from SmartLead & HeyReach
             </p>
+          </div>
+          <div className="analyst-tabs" role="tablist" aria-label="AI Analyst sections">
+            <button
+              type="button"
+              role="tab"
+              aria-selected
+              className="analyst-tab analyst-tab-active"
+              onClick={() => setAnalystTab("ask")}
+            >
+              Ask
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={false}
+              className="analyst-tab"
+              onClick={() => setAnalystTab("contacts")}
+            >
+              Prospects
+            </button>
           </div>
           {messages.length > 0 && (
             <button onClick={reset} className="btn" style={{ fontSize: 12 }}>
@@ -98,7 +150,6 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* Messages */}
         <div
           ref={scrollRef}
           style={{
@@ -131,7 +182,7 @@ export default function ChatPage() {
                   Ask about your campaign data
                 </h2>
                 <p style={{ margin: "0 0 24px", fontSize: 13, color: "var(--text-muted)" }}>
-                  Gemini has access to all your campaigns, sequences, leads, and contacts. It queries Supabase live.
+                  Gemini has access to campaigns, sequences, leads, and contacts. It queries Supabase live.
                 </p>
 
                 <div
@@ -226,7 +277,6 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Input bar */}
         <div
           style={{
             borderTop: "1px solid var(--border)",
@@ -306,6 +356,23 @@ export default function ChatPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="app-layout">
+          <AppSidebar active="chat" />
+          <div className="content-area" style={{ padding: 24 }}>
+            <p style={{ color: "var(--text-muted)" }}>Loading…</p>
+          </div>
+        </div>
+      }
+    >
+      <ChatPageInner />
+    </Suspense>
   );
 }
 

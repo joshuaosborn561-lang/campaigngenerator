@@ -143,8 +143,8 @@ export default function ClientsDirectoryPage() {
                     ) : null}
                   </div>
                   <div className="sg-client-actions">
-                    <Link href={`/contacts?client_id=${encodeURIComponent(c.id)}`} className="sg-link">
-                      Contacts
+                    <Link href={`/chat?view=contacts&client_id=${encodeURIComponent(c.id)}`} className="sg-link">
+                      Prospects
                     </Link>
                     <Link href={`/campaign-tester/new?client_id=${encodeURIComponent(c.id)}`} className="sg-link">
                       New campaign

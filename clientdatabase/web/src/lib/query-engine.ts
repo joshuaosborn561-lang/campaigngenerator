@@ -5,8 +5,8 @@ const SYSTEM_PROMPT = `You are the Agency Intelligence Assistant — an AI analy
 
 DATABASE SCHEMA:
 - clients: id, name, industry_vertical
-- campaigns: id, client_id, name, status, target_title, target_company_size, target_industry, target_geography, offer_type, copy_patterns[], send_volume, open_rate, reply_rate, bounce_rate, positive_reply_count, negative_reply_count, meetings_booked, list_source, campaign_start_date, gemini_offer_profile (jsonb), inferred_icp (jsonb), inferred_at
-- sequence_steps: id, campaign_id, step_number, variant_label, subject_line, email_body, open_rate, reply_rate, offer_type, copy_patterns[], inferred_offer_angle (jsonb)
+- campaigns: id, client_id, name, status, target_title, target_company_size, target_industry, target_geography, offer_type, copy_patterns[], send_volume, open_rate, reply_rate, bounce_rate, positive_reply_count, negative_reply_count, meetings_booked, list_source, campaign_start_date, gemini_offer_profile (jsonb — campaign-level offer decomposition), inferred_icp (jsonb — structured ICP from lead samples), inferred_at
+- sequence_steps: id, campaign_id, step_number, variant_label, subject_line, email_body, open_rate, reply_rate, offer_type, copy_patterns[], inferred_offer_angle (jsonb — per-variant email decomposition)
 - leads: id, campaign_id, email, first_name, last_name, company, title, industry, company_size, seniority, department, city, state, country, category, reply_sentiment, meeting_booked
 - email_events: id, campaign_id, lead_id, event_type, event_timestamp, sequence_step, metadata
 - contacts: id, email, first_name, last_name, full_name, title, seniority, department, linkedin_url, company_name, company_domain, company_industry, company_size, company_revenue, city, state, country, tags[], source_platform, total_campaigns, total_emails_sent, total_replies, overall_status, meeting_booked

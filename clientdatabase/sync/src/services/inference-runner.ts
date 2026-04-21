@@ -12,6 +12,43 @@ import {
 
 const DRY = process.env.INFERENCE_DRY_RUN === "true";
 
+/** Re-run Gemini when stored JSON predates schema upgrades (no sequence edit required). */
+const OFFER_PROFILE_V2_KEYS = [
+  "respond_now_reason",
+  "ai_enrichment_typical",
+  "post_offer_hook_pattern",
+  "social_proof_detail",
+  "risk_reversal_summary",
+] as const;
+
+function offerProfileNeedsRefresh(p: Record<string, unknown> | null): boolean {
+  if (!p) return true;
+  return OFFER_PROFILE_V2_KEYS.some((k) => !(k in p));
+}
+
+const VARIANT_ANGLE_V2_KEYS = [
+  "respond_now_reason",
+  "ai_enrichment_present",
+  "post_offer_hook",
+  "social_proof_case_study",
+  "social_proof_metrics",
+  "risk_reversal",
+] as const;
+
+function variantAngleNeedsRefresh(angle: unknown): boolean {
+  if (!angle || typeof angle !== "object") return true;
+  const o = angle as Record<string, unknown>;
+  return VARIANT_ANGLE_V2_KEYS.some((k) => !(k in o));
+}
+
+const ICP_V2_KEYS = ["org_functions_note", "company_profile", "primary_locations"] as const;
+
+function icpNeedsRefresh(icp: unknown): boolean {
+  if (!icp || typeof icp !== "object") return true;
+  const o = icp as Record<string, unknown>;
+  return ICP_V2_KEYS.some((k) => !(k in o));
+}
+
 export async function runInferenceForClient(
   store: SupabaseStore,
   inference: InferenceService,
@@ -87,7 +124,7 @@ async function runInferenceForCampaign(
     body: s.email_body || "",
   }));
 
-  if (sequenceChanged || !offerProfile) {
+  if (sequenceChanged || !offerProfile || offerProfileNeedsRefresh(offerProfile)) {
     console.log(
       `[inference][${clientName}] Campaign "${campaignName}": offer profile (${steps.length} variants, seq changed=${sequenceChanged})`
     );
@@ -114,7 +151,8 @@ async function runInferenceForCampaign(
       sequenceChanged ||
       s.content_fingerprint !== contentFp ||
       !s.inferred_offer_angle ||
-      !s.inferred_at;
+      !s.inferred_at ||
+      variantAngleNeedsRefresh(s.inferred_offer_angle);
 
     if (!needsVariant || !body.trim()) continue;
 
@@ -156,6 +194,7 @@ async function runInferenceForCampaign(
   const needsIcp =
     sequenceChanged ||
     !hasIcp ||
+    icpNeedsRefresh(campaignRow?.inferred_icp) ||
     (latestLeadUpdate && inferredAt && new Date(latestLeadUpdate) > new Date(inferredAt));
 
   if (!needsIcp) return;

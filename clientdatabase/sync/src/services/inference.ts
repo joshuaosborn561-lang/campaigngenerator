@@ -41,12 +41,36 @@ const OFFER_PROFILE_SCHEMA = {
     },
     incentive_summary: {
       type: Type.STRING,
-      description: "Concrete incentive if any: tickets, free trial days, audit, lead magnet, etc., or null if none",
+      description: "Concrete incentive if any: tickets, free trial days, audit, lead magnet, etc., or empty string if none",
+    },
+    respond_now_reason: {
+      type: Type.STRING,
+      description: "Why would the prospect reply *now* (urgency, deadline, season, trigger event, scarcity). Empty if none.",
+    },
+    ai_enrichment_typical: {
+      type: Type.STRING,
+      description: "yes | no | mixed — whether sequences typically use AI-style personalization beyond mail-merge",
+    },
+    ai_enrichment_examples: {
+      type: Type.STRING,
+      description: "Short examples of AI-flavored lines if any; empty if none",
+    },
+    post_offer_hook_pattern: {
+      type: Type.STRING,
+      description: "After stating the offer/incentive, what does the sequence usually talk about (pain, peer story, proof, question)?",
     },
     case_studies_mentioned: { type: Type.BOOLEAN },
     social_proof_style: {
       type: Type.STRING,
       description: "none | logos | metrics | testimonials | peer_comparison | other",
+    },
+    social_proof_detail: {
+      type: Type.STRING,
+      description: "Across variants: named case study/customer, specific metrics, ROI or % claims if any; empty if none",
+    },
+    risk_reversal_summary: {
+      type: Type.STRING,
+      description: "Guarantees, pilots, opt-outs, 'no pitch', refunds, low-commitment CTAs — empty if none",
     },
     approximate_word_count_band: {
       type: Type.STRING,
@@ -64,8 +88,14 @@ const OFFER_PROFILE_SCHEMA = {
   required: [
     "offer_type",
     "incentive_summary",
+    "respond_now_reason",
+    "ai_enrichment_typical",
+    "ai_enrichment_examples",
+    "post_offer_hook_pattern",
     "case_studies_mentioned",
     "social_proof_style",
+    "social_proof_detail",
+    "risk_reversal_summary",
     "approximate_word_count_band",
     "primary_cta",
     "confidence",
@@ -77,11 +107,36 @@ const VARIANT_ANGLE_SCHEMA = {
   properties: {
     offer_type: { type: Type.STRING },
     incentive_summary: { type: Type.STRING },
+    respond_now_reason: {
+      type: Type.STRING,
+      description: "Why reply now in THIS message (urgency, deadline, timely hook). Empty if not present.",
+    },
+    ai_enrichment_present: { type: Type.BOOLEAN },
+    ai_enrichment_note: {
+      type: Type.STRING,
+      description: "What looks AI-generated or hyper-personalized; empty if ai_enrichment_present is false",
+    },
+    post_offer_hook: {
+      type: Type.STRING,
+      description: "After the incentive/offer, what does the copy discuss (problem, story, proof, question)?",
+    },
     hook_style: {
       type: Type.STRING,
-      description: "problem_first | curiosity | social_proof | question_led | compliment_led | story | other",
+      description: "Legacy style tag: problem_first | curiosity | social_proof | question_led | compliment_led | story | other",
     },
     main_pain_addressed: { type: Type.STRING },
+    social_proof_case_study: {
+      type: Type.STRING,
+      description: "Named customer, logo, or case label if any; empty if none",
+    },
+    social_proof_metrics: {
+      type: Type.STRING,
+      description: "Concrete numbers, KPIs, or ROI claims; empty if none",
+    },
+    risk_reversal: {
+      type: Type.STRING,
+      description: "Guarantee, pilot, risk-free language, opt-out; empty if none",
+    },
     cta_type: { type: Type.STRING },
     assets_used: {
       type: Type.ARRAY,
@@ -93,8 +148,15 @@ const VARIANT_ANGLE_SCHEMA = {
   required: [
     "offer_type",
     "incentive_summary",
+    "respond_now_reason",
+    "ai_enrichment_present",
+    "ai_enrichment_note",
+    "post_offer_hook",
     "hook_style",
     "main_pain_addressed",
+    "social_proof_case_study",
+    "social_proof_metrics",
+    "risk_reversal",
     "cta_type",
     "assets_used",
     "confidence",
@@ -104,14 +166,35 @@ const VARIANT_ANGLE_SCHEMA = {
 const ICP_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    title_patterns: { type: Type.ARRAY, items: { type: Type.STRING } },
-    seniority_focus: { type: Type.ARRAY, items: { type: Type.STRING } },
+    title_patterns: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "Distinct job title clusters (e.g. 'VP Sales', 'Head of People')",
+    },
+    seniority_focus: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "c-suite, vp, director, manager, senior, entry, etc.",
+    },
     departments: { type: Type.ARRAY, items: { type: Type.STRING } },
+    org_functions_note: {
+      type: Type.STRING,
+      description: "Short clarification of functional focus (e.g. 'mostly GTM leaders, some HR')",
+    },
+    company_profile: {
+      type: Type.STRING,
+      description: "Who the company is: industry segment, B2B/B2C, typical account types",
+    },
     geography_summary: { type: Type.STRING },
+    primary_locations: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "City, region, or country strings seen in samples (dedupe)",
+    },
     industry_primary: { type: Type.STRING },
     industry_secondary: { type: Type.STRING, description: "Secondary industry or empty string if none" },
     company_size_range: { type: Type.STRING },
-    revenue_band: { type: Type.STRING, description: "Typical revenue if inferable from samples" },
+    revenue_band: { type: Type.STRING, description: "Typical company revenue band if inferable from samples" },
     sample_notes: { type: Type.STRING, description: "One concrete sentence, e.g. 'Mostly Owners at small MSPs in Texas'" },
     confidence: { type: Type.STRING, enum: ["high", "medium", "low"] },
   },
@@ -119,7 +202,10 @@ const ICP_SCHEMA = {
     "title_patterns",
     "seniority_focus",
     "departments",
+    "org_functions_note",
+    "company_profile",
     "geography_summary",
+    "primary_locations",
     "industry_primary",
     "industry_secondary",
     "company_size_range",
@@ -165,11 +251,15 @@ Campaign name: ${campaignName}
 
 ${lines}
 
-Infer the overall offer strategy and incentives across the sequence. Focus on:
-- What concrete incentive is promised (free days, audit, tickets, lead magnet, etc.) — not a generic business description.
-- Whether case studies / proof / social proof appear.
-- Approximate length band of the first touch vs later steps if they differ (summarize).
-- Primary CTA style.
+Infer the overall offer strategy across the sequence. Fill every schema field; use empty string or false when absent.
+
+Cover explicitly:
+- Concrete incentive (what they get) and separately "why respond now" (urgency, deadline, scarcity, timely trigger).
+- Whether copy looks AI-enriched (hyper-personalization, "noticed your post", obvious merge tricks) — yes/no/mixed plus a short example line if any.
+- After the core offer/incentive, what the copy usually talks about next (pain story, peer proof, metrics, question) — post_offer_hook_pattern.
+- Social proof: style plus named case study/customer, metrics, ROI or % claims if present.
+- Risk reversal: guarantees, pilots, opt-outs, low-commitment framing.
+- Length band (first touch vs follow-ups if different) and primary CTA style.
 
 Return ONLY JSON matching the schema.`;
 
@@ -206,7 +296,14 @@ Subject: ${subject}
 Body:
 ${body}
 
-Infer offer structure: concrete incentive (if any), hook style, main pain, CTA, and assets (case study, stats, etc.).
+Decompose this message:
+- Incentive / core offer and separately why reply *now* if present.
+- Whether AI-style enrichment appears in this variant (boolean + one-line note).
+- After the offer line, what the body discusses (post_offer_hook) vs hook_style tag.
+- Social proof: named case/customer and specific metrics or ROI if any.
+- Risk reversal language if any.
+- Main pain, CTA, hook_style, and assets_used (case study, stats, etc.).
+
 Return ONLY JSON matching the schema.`;
 
     const response = await this.genai.models.generateContent({
@@ -251,6 +348,16 @@ Return ONLY JSON matching the schema.`;
 Campaign name: ${campaignName}
 ${offerBit}
 Lead sample (JSON): ${JSON.stringify(rows, null, 2)}
+
+Each lead row may include: title, company, industry, company_size, revenue, seniority, department (org function e.g. sales, hr), location fields.
+
+Produce a structured ICP that covers:
+- title_patterns and seniority_focus from the data
+- departments: org functions (sales, hr, marketing, …) — use title + department field; org_functions_note for nuance
+- company_profile: who these companies are (segment, typical account type)
+- geography_summary plus primary_locations (deduped cities/regions/countries from samples)
+- industry_primary, industry_secondary, company_size_range, revenue_band
+- sample_notes: one concrete sentence; confidence
 
 Be specific. If titles cluster (e.g. Owners at MSPs in Texas), say that. Do not generalize to "IT decision-makers" unless the data supports it.
 Return ONLY JSON matching the schema.`;
