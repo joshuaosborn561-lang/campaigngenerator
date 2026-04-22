@@ -50,145 +50,6 @@ export function hashOfferEmailSample(
   return createHash("sha256").update(payload).digest("hex");
 }
 
-/**
- * Apollo / ZoomInfo–style dimensions for WHO the campaign targets (inferred from lead samples + copy).
- * Values are best-effort from available data; use empty string / empty array when unknown.
- */
-const APOLLO_STYLE_ICP_SIGNALS_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    technologies: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "Tech stack / tools associated with accounts (e.g. Salesforce, HubSpot) when inferable",
-    },
-    funding_stage: {
-      type: Type.STRING,
-      description: "Company funding or stage: bootstrapped, seed, series_a–c, pe, public — empty if unknown",
-    },
-    job_function: {
-      type: Type.STRING,
-      description: "Broader function bucket: Sales, Marketing, IT, HR, Finance, Operations — empty if mixed/unknown",
-    },
-    hq_location: {
-      type: Type.STRING,
-      description: "HQ region focus if distinct from person location (e.g. US HQ, EMEA HQ)",
-    },
-    person_keywords: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "Skills, topics, certifications on personas when visible in titles or enrichment",
-    },
-    buying_intent_topics: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "Intent or surge topics (hiring, migration, funding news) if inferable from samples",
-    },
-    naics_or_industry_code: {
-      type: Type.STRING,
-      description: "Industry taxonomy hint (NAICS/SIC/vertical label) — empty if unknown",
-    },
-    company_public_private: {
-      type: Type.STRING,
-      description: "public | private | unknown",
-    },
-    years_in_role: {
-      type: Type.STRING,
-      description: "Seniority tenure band if inferable (e.g. 'new in role', 'veteran') — empty if unknown",
-    },
-    education_summary: {
-      type: Type.STRING,
-      description: "Education level signal if ever present — usually empty",
-    },
-    employee_count_band: {
-      type: Type.STRING,
-      description: "Employee count bracket consistent with company_size_range (e.g. 51-200)",
-    },
-  },
-  required: [
-    "technologies",
-    "funding_stage",
-    "job_function",
-    "hq_location",
-    "person_keywords",
-    "buying_intent_topics",
-    "naics_or_industry_code",
-    "company_public_private",
-    "years_in_role",
-    "education_summary",
-    "employee_count_band",
-  ],
-};
-
-/**
- * Same “Apollo-style” dimensions interpreted from OUTBOUND COPY (what the emails imply about targeting).
- */
-const APOLLO_STYLE_EMAIL_SIGNALS_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    technologies: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "Tools/platforms explicitly mentioned in copy",
-    },
-    funding_stage: {
-      type: Type.STRING,
-      description: "Stage language in copy (e.g. 'fast-growing', 'PE-backed') — empty if none",
-    },
-    job_function: {
-      type: Type.STRING,
-      description: "Function the copy speaks to (Sales, RevOps, IT) — empty if broad",
-    },
-    hq_location: {
-      type: Type.STRING,
-      description: "Geo or HQ references in copy",
-    },
-    person_keywords: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "Role skills or topics referenced in copy",
-    },
-    buying_intent_topics: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "Triggers in copy (hiring, migration, compliance deadline)",
-    },
-    naics_or_industry_code: {
-      type: Type.STRING,
-      description: "Named verticals/industries in copy",
-    },
-    company_public_private: {
-      type: Type.STRING,
-      description: "public | private | unknown from copy",
-    },
-    years_in_role: {
-      type: Type.STRING,
-      description: "Tenure hints in copy — empty if none",
-    },
-    education_summary: {
-      type: Type.STRING,
-      description: "Education references — usually empty",
-    },
-    employee_count_band: {
-      type: Type.STRING,
-      description: "Company size language in copy (headcount bands)",
-    },
-  },
-  required: [
-    "technologies",
-    "funding_stage",
-    "job_function",
-    "hq_location",
-    "person_keywords",
-    "buying_intent_topics",
-    "naics_or_industry_code",
-    "company_public_private",
-    "years_in_role",
-    "education_summary",
-    "employee_count_band",
-  ],
-};
-
 const OFFER_PROFILE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -237,7 +98,6 @@ const OFFER_PROFILE_SCHEMA = {
       type: Type.STRING,
       description: "reply | calendar | call | resource | meeting | other",
     },
-    apollo_style_email_signals: APOLLO_STYLE_EMAIL_SIGNALS_SCHEMA,
     confidence: {
       type: Type.STRING,
       enum: ["high", "medium", "low"],
@@ -256,7 +116,6 @@ const OFFER_PROFILE_SCHEMA = {
     "risk_reversal_summary",
     "approximate_word_count_band",
     "primary_cta",
-    "apollo_style_email_signals",
     "confidence",
   ],
 };
@@ -302,7 +161,6 @@ const VARIANT_ANGLE_SCHEMA = {
       items: { type: Type.STRING },
       description: "e.g. case study, stat, named client, competitor mention",
     },
-    apollo_style_email_signals: APOLLO_STYLE_EMAIL_SIGNALS_SCHEMA,
     confidence: { type: Type.STRING, enum: ["high", "medium", "low"] },
   },
   required: [
@@ -319,7 +177,6 @@ const VARIANT_ANGLE_SCHEMA = {
     "risk_reversal",
     "cta_type",
     "assets_used",
-    "apollo_style_email_signals",
     "confidence",
   ],
 };
@@ -356,7 +213,6 @@ const ICP_SCHEMA = {
     industry_secondary: { type: Type.STRING, description: "Secondary industry or empty string if none" },
     company_size_range: { type: Type.STRING },
     revenue_band: { type: Type.STRING, description: "Typical company revenue band if inferable from samples" },
-    apollo_style_icp_signals: APOLLO_STYLE_ICP_SIGNALS_SCHEMA,
     sample_notes: { type: Type.STRING, description: "One concrete sentence, e.g. 'Mostly Owners at small MSPs in Texas'" },
     confidence: { type: Type.STRING, enum: ["high", "medium", "low"] },
   },
@@ -372,7 +228,6 @@ const ICP_SCHEMA = {
     "industry_secondary",
     "company_size_range",
     "revenue_band",
-    "apollo_style_icp_signals",
     "sample_notes",
     "confidence",
   ],
@@ -439,7 +294,6 @@ Cover explicitly:
 - Social proof: style plus named case study/customer, metrics, ROI or % claims if present.
 - Risk reversal: guarantees, pilots, opt-outs, low-commitment framing.
 - Length band (first touch vs follow-ups if different) and primary CTA style.
-- apollo_style_email_signals: ten B2B-database-style dimensions IMPLIED BY THE COPY (technologies mentioned, funding/stage language, job function spoken to, HQ/geo, person keywords, intent triggers, industry/vertical, public vs private, tenure hints, headcount language). Use empty values when not present.
 
 Return ONLY JSON matching the schema.`;
 
@@ -483,7 +337,6 @@ Decompose this message:
 - Social proof: named case/customer and specific metrics or ROI if any.
 - Risk reversal language if any.
 - Main pain, CTA, hook_style, and assets_used (case study, stats, etc.).
-- apollo_style_email_signals: same ten dimensions as in campaign-level, but ONLY what appears in THIS message.
 
 Return ONLY JSON matching the schema.`;
 
@@ -539,12 +392,10 @@ Lead sample (JSON): ${JSON.stringify(rows, null, 2)}
 ICP factors are identified from:
 - Structured fields on each row (title, seniority, department, company, industry, size, revenue, location, domain, engagement flags).
 - Heuristic seniority/department may be pre-filled from job title parsing.
-- apollo_style_icp_signals: infer ten B2B-database-style dimensions (technologies, funding stage, job function, HQ vs person geo, persona keywords, buying intent, NAICS/vertical, public/private, years in role, education, employee band) from whatever the data supports — use empty strings/arrays when unknown.
 
 Produce a structured ICP that covers:
 - title_patterns, seniority_focus, departments, org_functions_note, company_profile
 - geography_summary, primary_locations, industry_primary, industry_secondary, company_size_range, revenue_band
-- apollo_style_icp_signals (required object)
 - sample_notes and confidence
 
 Be specific. If titles cluster (e.g. Owners at MSPs in Texas), say that. Do not generalize to "IT decision-makers" unless the data supports it.

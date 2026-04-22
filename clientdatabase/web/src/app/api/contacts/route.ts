@@ -20,9 +20,6 @@ import { supabase } from "@/lib/supabase";
  *   source     - source_platform
  *   tags       - comma-separated tags (cs/contains)
  *   meeting    - true/false
- *   technologies - comma-separated; overlaps contacts.technologies[]
- *   funding_stage - eq
- *   job_function - ilike
  *   unsubscribed - true/false → is_unsubscribed
  *   hostile - true/false → is_hostile_opt_out
  *   sort       - column to sort by (default: created_at)
@@ -132,14 +129,6 @@ export async function GET(req: NextRequest) {
     const meeting = params.get("meeting");
     if (meeting === "true") query = query.eq("meeting_booked", true);
     if (meeting === "false") query = query.eq("meeting_booked", false);
-
-    const tech = params.get("technologies");
-    if (tech) {
-      const list = tech.split(",").map((t) => t.trim()).filter(Boolean);
-      if (list.length) query = query.overlaps("technologies", list);
-    }
-    eq("funding_stage", "funding_stage");
-    ilike("job_function", "job_function");
 
     const unsub = params.get("unsubscribed");
     if (unsub === "true") query = query.eq("is_unsubscribed", true);

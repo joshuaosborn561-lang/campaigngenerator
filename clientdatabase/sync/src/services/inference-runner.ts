@@ -24,12 +24,12 @@ const OFFER_PROFILE_V2_KEYS = [
   "risk_reversal_summary",
 ] as const;
 
-const OFFER_PROFILE_V3_KEYS = ["apollo_style_email_signals"] as const;
-
 function offerProfileNeedsRefresh(p: Record<string, unknown> | null): boolean {
   if (!p) return true;
   if (OFFER_PROFILE_V2_KEYS.some((k) => !(k in p))) return true;
-  return OFFER_PROFILE_V3_KEYS.some((k) => !(k in p));
+  // Drop legacy apollo_style_* blobs from older inference versions
+  if ("apollo_style_email_signals" in p) return true;
+  return false;
 }
 
 const VARIANT_ANGLE_V2_KEYS = [
@@ -41,23 +41,21 @@ const VARIANT_ANGLE_V2_KEYS = [
   "risk_reversal",
 ] as const;
 
-const VARIANT_ANGLE_V3_KEYS = ["apollo_style_email_signals"] as const;
-
 function variantAngleNeedsRefresh(angle: unknown): boolean {
   if (!angle || typeof angle !== "object") return true;
   const o = angle as Record<string, unknown>;
   if (VARIANT_ANGLE_V2_KEYS.some((k) => !(k in o))) return true;
-  return VARIANT_ANGLE_V3_KEYS.some((k) => !(k in o));
+  if ("apollo_style_email_signals" in o) return true;
+  return false;
 }
 
 const ICP_V2_KEYS = ["org_functions_note", "company_profile", "primary_locations"] as const;
-const ICP_V3_KEYS = ["apollo_style_icp_signals"] as const;
-
 function icpNeedsRefresh(icp: unknown): boolean {
   if (!icp || typeof icp !== "object") return true;
   const o = icp as Record<string, unknown>;
   if (ICP_V2_KEYS.some((k) => !(k in o))) return true;
-  return ICP_V3_KEYS.some((k) => !(k in o));
+  if ("apollo_style_icp_signals" in o) return true;
+  return false;
 }
 
 export async function runInferenceForClient(
