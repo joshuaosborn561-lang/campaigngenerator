@@ -28,6 +28,12 @@ interface OfferRow {
   cta: string;
 }
 
+interface IdeaRow {
+  id: string;
+  name: string;
+  targeting_level: "broad" | "focused" | "niche" | string;
+}
+
 /**
  * Minimal stub-creation page. Captures just enough to create a brief row, then
  * redirects into the full Module 1 wizard where the operator fills out the
@@ -51,6 +57,8 @@ function NewCampaignBriefContent() {
   const [laneId, setLaneId] = useState<string>("");
   const [offers, setOffers] = useState<OfferRow[]>([]);
   const [offerId, setOfferId] = useState<string>("");
+  const [ideas, setIdeas] = useState<IdeaRow[]>([]);
+  const [ideaId, setIdeaId] = useState<string>("");
 
   useEffect(() => {
     if (clientIdFromUrl) setClientId(clientIdFromUrl);
@@ -97,6 +105,8 @@ function NewCampaignBriefContent() {
       setLaneId("");
       setOffers([]);
       setOfferId("");
+      setIdeas([]);
+      setIdeaId("");
       return;
     }
     (async () => {
@@ -115,6 +125,27 @@ function NewCampaignBriefContent() {
       }
     })();
   }, [strategyId]);
+
+  // Load ideas when lane changes
+  useEffect(() => {
+    if (!strategyId || !laneId) {
+      setIdeas([]);
+      setIdeaId("");
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/campaign-tester/strategies/${encodeURIComponent(strategyId)}/campaign-ideas?lane_id=${encodeURIComponent(laneId)}`
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Failed to load ideas");
+        setIdeas(data.ideas ?? []);
+      } catch {
+        setIdeas([]);
+      }
+    })();
+  }, [strategyId, laneId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -150,6 +181,7 @@ function NewCampaignBriefContent() {
           lane_id: laneId,
           offer_id: offerId,
           campaign_name: name.trim(),
+          idea_id: ideaId || undefined,
         }),
       });
       const data = await res.json();
@@ -250,7 +282,10 @@ function NewCampaignBriefContent() {
                 <select
                   className="ct-select"
                   value={laneId}
-                  onChange={(e) => setLaneId(e.target.value)}
+                  onChange={(e) => {
+                    setLaneId(e.target.value);
+                    setIdeaId("");
+                  }}
                   disabled={!strategyId}
                 >
                   <option value="">Select a lane…</option>
@@ -260,6 +295,26 @@ function NewCampaignBriefContent() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="ct-field">
+                <label>Campaign idea (optional)</label>
+                <select
+                  className="ct-select"
+                  value={ideaId}
+                  onChange={(e) => setIdeaId(e.target.value)}
+                  disabled={!strategyId || !laneId || ideas.length === 0}
+                >
+                  <option value="">No idea selected…</option>
+                  {ideas.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.name}
+                      {i.targeting_level ? ` · ${i.targeting_level}` : ""}
+                    </option>
+                  ))}
+                </select>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
+                  Generate 15–25 ideas per lane in <Link href="/campaign-tester/strategy">Client Strategy</Link>, then pick one here.
+                </p>
               </div>
               <div className="ct-field" style={{ gridColumn: "1 / -1" }}>
                 <label>Offer *</label>

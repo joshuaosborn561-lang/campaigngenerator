@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppSidebar from "@/components/AppSidebar";
-import { ChipInput } from "@/components/campaign-tester/ChipInput";
 
 type ClientRow = { id: string; name: string; industry_vertical: string | null };
 type StrategyRow = {
@@ -23,6 +22,7 @@ type LaneRow = {
   name: string;
   description: string | null;
   titles: string[] | null;
+  departments: string[] | null;
   industries: string[] | null;
   company_size: string | null;
   geography: string | null;
@@ -40,6 +40,15 @@ type OfferRow = {
   tags: string[] | null;
 };
 
+type WebsiteAnalysisRow = {
+  id: string;
+  strategy_id: string;
+  website_url: string;
+  summary: string | null;
+  extracted: Record<string, unknown> | null;
+  updated_at: string;
+};
+
 export default function ClientStrategyPage() {
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [clientId, setClientId] = useState("");
@@ -47,6 +56,9 @@ export default function ClientStrategyPage() {
   const [strategyId, setStrategyId] = useState("");
   const [lanes, setLanes] = useState<LaneRow[]>([]);
   const [offers, setOffers] = useState<OfferRow[]>([]);
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [analysis, setAnalysis] = useState<WebsiteAnalysisRow | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,6 +109,8 @@ export default function ClientStrategyPage() {
     if (!strategyId) {
       setLanes([]);
       setOffers([]);
+      setAnalysis(null);
+      setWebsiteUrl("");
       return;
     }
     (async () => {
@@ -116,6 +130,25 @@ export default function ClientStrategyPage() {
         setLanes([]);
         setOffers([]);
         setError(e instanceof Error ? e.message : "Failed to load strategy details");
+      }
+    })();
+  }, [strategyId]);
+
+  useEffect(() => {
+    if (!strategyId) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/campaign-tester/strategies/${encodeURIComponent(strategyId)}/website-analyze`, {
+          method: "GET",
+        });
+        const data = await res.json();
+        if (!res.ok) return;
+        if (data.analysis) {
+          setAnalysis(data.analysis as WebsiteAnalysisRow);
+          setWebsiteUrl(String((data.analysis as any).website_url ?? ""));
+        }
+      } catch {
+        // ignore
       }
     })();
   }, [strategyId]);
@@ -181,6 +214,88 @@ export default function ClientStrategyPage() {
       setOffers((prev) => [...prev, data.offer]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Offer create failed");
+    }
+  }
+
+  async function analyzeWebsite() {
+    if (!strategyId) return;
+    const url = websiteUrl.trim();
+    if (!url) {
+      setError("Website URL is required.");
+      return;
+    }
+    setError(null);
+    setAnalyzing(true);
+    try {
+      const res = await fetch(
+        `/api/campaign-tester/strategies/${encodeURIComponent(strategyId)}/website-analyze`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ website_url: url }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Website analysis failed");
+      setAnalysis(data.analysis as WebsiteAnalysisRow);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Website analysis failed");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function addLanesFromAnalysis() {
+    if (!strategyId || !analysis?.extracted) return;
+    const lanesAny = (analysis.extracted as any)?.proposed_icp_lanes;
+    if (!Array.isArray(lanesAny) || lanesAny.length === 0) {
+      setError("No proposed lanes found in analysis.");
+      return;
+    }
+    setError(null);
+    try {
+      for (const pl of lanesAny.slice(0, 6)) {
+        const res = await fetch(`/api/campaign-tester/strategies/${strategyId}/lanes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: String(pl.lane_name || "").trim() || "ICP lane",
+            description: String(pl.description || "").trim() || null,
+            titles: Array.isArray(pl.titles) ? pl.titles : [],
+            departments: Array.isArray(pl.departments) ? pl.departments : [],
+            industries: Array.isArray(pl.industries) ? pl.industries : [],
+            company_size: typeof pl.company_size === "string" ? pl.company_size : null,
+            geography: typeof pl.geography === "string" ? pl.geography : null,
+            exclusions: Array.isArray(pl.exclusions) ? pl.exclusions : [],
+            signals: Array.isArray(pl.signals) ? pl.signals : [],
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Lane create failed");
+        setLanes((prev) => [...prev, data.lane]);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add lanes from analysis");
+    }
+  }
+
+  async function generateIdeasForLane(laneId: string) {
+    if (!strategyId || !laneId) return;
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/campaign-tester/strategies/${encodeURIComponent(strategyId)}/campaign-ideas`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lane_id: laneId, overwrite: true }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Idea generation failed");
+      alert(`Generated ${Array.isArray(data.ideas) ? data.ideas.length : 0} idea(s). Open New Campaign to pick one.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Idea generation failed");
     }
   }
 
@@ -255,6 +370,45 @@ export default function ClientStrategyPage() {
         ) : (
           <>
             <div className="ct-card">
+              <h2>Website analysis (recommended)</h2>
+              <p className="ct-sub">
+                Start by analyzing the client website to propose ICP lanes and extract proof for campaign ideas.
+              </p>
+              <div className="ct-grid2">
+                <div className="ct-field" style={{ gridColumn: "1 / -1" }}>
+                  <label>Website URL</label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      className="ct-input"
+                      value={websiteUrl}
+                      onChange={(e) => setWebsiteUrl(e.target.value)}
+                      placeholder="https://example.com"
+                      style={{ flex: 1 }}
+                    />
+                    <button className="btn btn-primary" type="button" onClick={analyzeWebsite} disabled={analyzing}>
+                      {analyzing ? "Analyzing…" : "Analyze"}
+                    </button>
+                  </div>
+                  {analysis?.summary ? (
+                    <div style={{ marginTop: 10, padding: 12, border: "1px solid var(--border)", borderRadius: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Summary</div>
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{analysis.summary}</div>
+                      <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button className="btn" type="button" onClick={addLanesFromAnalysis}>
+                          + Add suggested lanes
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
+                      Tip: after analyzing, use “Add suggested lanes” to create Midmarket / Enterprise lanes quickly.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="ct-card">
               <h2>ICP lanes</h2>
               <p className="ct-sub">
                 Each lane is a distinct “who + why now” segment. You can have multiple lanes per client.
@@ -278,8 +432,14 @@ export default function ClientStrategyPage() {
                         <div className="ct-list-sub">
                           {[l.company_size, l.geography].filter(Boolean).join(" · ") || "—"}
                         </div>
+                        <div className="ct-list-sub" style={{ marginTop: 4 }}>
+                          {(Array.isArray(l.titles) ? l.titles.slice(0, 4).join(", ") : "") || "—"}
+                        </div>
                       </div>
                       <span className="ct-chip ct-chip-todo">lane</span>
+                      <button className="btn" type="button" onClick={() => generateIdeasForLane(l.id)}>
+                        Generate 15–25 ideas
+                      </button>
                     </li>
                   ))}
                 </ul>
