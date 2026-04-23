@@ -1,36 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI, Type } from "@google/genai";
 import { supabase } from "@/lib/supabase";
+import { callClaude, parseJsonFromClaude } from "@/lib/campaign-tester/claude-client";
 
 type Ctx = { params: Promise<{ strategyId: string }> };
 
-const GEMINI_MODEL = process.env.GEMINI_API_KEY ? "gemini-2.5-flash" : "";
-
-const IDEAS_SCHEMA = {
-  type: Type.ARRAY,
-  items: {
-    type: Type.OBJECT,
-    properties: {
-      name: { type: Type.STRING },
-      targeting_level: { type: Type.STRING, enum: ["broad", "focused", "niche"] },
-      list_filters: { type: Type.STRING },
-      ai_strategy: { type: Type.STRING },
-      value_prop: { type: Type.STRING },
-      overview: { type: Type.STRING },
-      requires_ai_personalization: { type: Type.BOOLEAN },
-      recommended_front_end_offer: { type: Type.STRING },
-    },
-    required: [
-      "name",
-      "targeting_level",
-      "list_filters",
-      "ai_strategy",
-      "value_prop",
-      "overview",
-      "requires_ai_personalization",
-      "recommended_front_end_offer",
-    ],
-  },
+type IdeaRow = {
+  name: string;
+  targeting_level: "broad" | "focused" | "niche";
+  list_filters: string;
+  ai_strategy: string;
+  value_prop: string;
+  overview: string;
+  requires_ai_personalization: boolean;
+  recommended_front_end_offer: string;
 };
 
 function checklistText(): string {
@@ -45,46 +27,82 @@ function checklistText(): string {
   ].join("\n");
 }
 
-async function generateIdeas(args: {
+const JSON_SHAPE = `Return ONLY a JSON array (no markdown) of 15-25 objects. Each object must have exactly these keys:
+- name (string)
+- targeting_level: "broad" | "focused" | "niche"
+- list_filters (string)
+- ai_strategy (string) — how to personalize or research at scale; for no-AI ideas say "none" and set requires_ai_personalization to false
+- value_prop (string)
+- overview (string) — enough for a copywriter to execute
+- requires_ai_personalization (boolean)
+- recommended_front_end_offer (string) — can be empty string if none`;
+
+function normalizeIdeas(raw: unknown): IdeaRow[] {
+  const arr: unknown[] = Array.isArray(raw) ? raw : (raw as { ideas?: unknown })?.ideas != null ? (raw as any).ideas : [];
+  if (!Array.isArray(arr)) return [];
+  const out: IdeaRow[] = [];
+  const levels = new Set(["broad", "focused", "niche"]);
+  for (const item of arr) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const tl = String(o.targeting_level ?? "focused");
+    const targeting_level = levels.has(tl) ? (tl as IdeaRow["targeting_level"]) : "focused";
+    out.push({
+      name: String(o.name ?? "").trim() || "Unnamed idea",
+      targeting_level,
+      list_filters: String(o.list_filters ?? ""),
+      ai_strategy: String(o.ai_strategy ?? ""),
+      value_prop: String(o.value_prop ?? ""),
+      overview: String(o.overview ?? ""),
+      requires_ai_personalization: Boolean(o.requires_ai_personalization),
+      recommended_front_end_offer: String(o.recommended_front_end_offer ?? ""),
+    });
+  }
+  return out;
+}
+
+async function generateIdeasWithClaude(args: {
+  clientId: string;
+  industryVertical: string | null;
   clientName: string;
   strategyName: string;
-  lane: any;
+  lane: Record<string, unknown>;
   websiteSummary: string;
-  extracted: any;
-}): Promise<any[]> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
-  const genai = new GoogleGenAI({ apiKey });
+  extracted: Record<string, unknown>;
+}): Promise<IdeaRow[]> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("ANTHROPIC_API_KEY is not set");
+  }
 
-  const prompt = `You are a cold outbound strategist for a B2B agency.
+  const system = `You are a cold outbound campaign strategist for a B2B agency. You produce structured campaign idea lists. Output is creative / strategic work.
 
-Client: ${args.clientName}
+${JSON_SHAPE}
+
+${checklistText()}`;
+
+  const user = `Client: ${args.clientName}
 Strategy: ${args.strategyName}
 
-Lane definition (JSON): ${JSON.stringify(args.lane)}
+ICP lane (JSON):
+${JSON.stringify(args.lane, null, 2)}
 
-Website understanding (summary): ${args.websiteSummary || "(none)"}
-Website extracted signals (JSON): ${JSON.stringify(args.extracted || {})}
+Website summary (may be empty):
+${args.websiteSummary || "(none)"}
 
-Generate campaign ideas to run for this lane. Each row should specify list filters (beyond base lane), the AI/personalization strategy, and the value proposition.
+Website extracted JSON (from earlier bulk analysis; may be empty):
+${JSON.stringify(args.extracted, null, 2)}
 
-${checklistText()}
+Generate the JSON array only.`;
 
-Return ONLY JSON array matching the schema.`;
-
-  const resp = await genai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: IDEAS_SCHEMA,
-    },
+  const raw = await callClaude({
+    system,
+    user,
+    maxTokens: 8192,
+    grounding: { clientId: args.clientId, industryVertical: args.industryVertical },
   });
 
-  const raw = (resp.text ?? "").trim();
-  const cleaned = raw.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim();
-  const parsed = JSON.parse(cleaned) as any[];
-  return Array.isArray(parsed) ? parsed : [];
+  const parsed = parseJsonFromClaude<unknown>(raw);
+  return normalizeIdeas(parsed);
 }
 
 export async function GET(req: NextRequest, ctx: Ctx) {
@@ -135,24 +153,26 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
     const { data: clientRow } = await supabase
       .from("clients")
-      .select("id, name")
+      .select("id, name, industry_vertical")
       .eq("id", sRes.data.client_id)
       .maybeSingle();
 
-    const websiteSummary = (analysisRes.data as any)?.summary ?? "";
-    const extracted = (analysisRes.data as any)?.extracted ?? {};
+    const websiteSummary = (analysisRes.data as { summary?: string } | null)?.summary ?? "";
+    const extracted = (analysisRes.data as { extracted?: Record<string, unknown> } | null)?.extracted ?? {};
 
-    const ideas = await generateIdeas({
+    const ideas = await generateIdeasWithClaude({
+      clientId: sRes.data.client_id,
+      industryVertical: clientRow?.industry_vertical ?? null,
       clientName: clientRow?.name ?? "Client",
       strategyName: sRes.data.name,
-      lane: laneRes.data,
+      lane: (laneRes.data as Record<string, unknown>) ?? {},
       websiteSummary,
-      extracted,
+      extracted: extracted && typeof extracted === "object" ? extracted : {},
     });
 
     if (ideas.length < 15) {
       return NextResponse.json(
-        { error: `Gemini returned only ${ideas.length} idea(s); expected at least 15.` },
+        { error: `Claude returned only ${ideas.length} idea(s); expected at least 15.` },
         { status: 502 }
       );
     }
@@ -166,18 +186,18 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
     }
 
-    const rows = ideas.slice(0, 40).map((i: any) => ({
+    const rows = ideas.slice(0, 40).map((i) => ({
       strategy_id: strategyId,
       lane_id,
-      name: String(i.name || "").trim().slice(0, 200),
+      name: i.name.slice(0, 200),
       targeting_level: i.targeting_level,
-      list_filters: String(i.list_filters || ""),
-      ai_strategy: String(i.ai_strategy || ""),
-      value_prop: String(i.value_prop || ""),
-      overview: String(i.overview || ""),
-      requires_ai_personalization: Boolean(i.requires_ai_personalization),
-      recommended_front_end_offer: String(i.recommended_front_end_offer || ""),
-      meta: { generator: "gemini-2.5-flash", checklist: "v1" },
+      list_filters: i.list_filters,
+      ai_strategy: i.ai_strategy,
+      value_prop: i.value_prop,
+      overview: i.overview,
+      requires_ai_personalization: i.requires_ai_personalization,
+      recommended_front_end_offer: i.recommended_front_end_offer,
+      meta: { generator: "claude-sonnet", checklist: "v1" },
       status: "active",
     }));
 
@@ -185,8 +205,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     return NextResponse.json({ ideas: data ?? [] }, { status: 201 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message ?? "Invalid JSON" }, { status: 400 });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Invalid request";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 }
-

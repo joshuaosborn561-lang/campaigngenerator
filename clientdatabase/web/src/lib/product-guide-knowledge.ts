@@ -26,6 +26,10 @@ A central warehouse (Supabase) for SmartLead + HeyReach campaign data, with:
 - Data-grounded answers using Gemini + Supabase tools (not generic marketing advice).
 - Ask about reply rates, subject lines, industries, Calendly-verified meetings, etc.
 
+## Client strategy + campaign ideas (/campaign-tester/strategy)
+- **Website analysis** (Gemini): bulk extract from the homepage; proposes ICP lanes and proof.
+- **15–25 campaign ideas per lane** (Claude Sonnet): creative / strategic list; then spawn briefs from lane + offer + optional idea.
+
 ## Campaign tester (flow)
 1. **New brief** (/campaign-tester/new): pick client + campaign name → creates brief row.
 2. **Module 1 — Brief** (/setup/brief): positioning, audience, pain, offer direction.
@@ -35,7 +39,7 @@ A central warehouse (Supabase) for SmartLead + HeyReach campaign data, with:
 6. **Tests** (/test/[n]): six copy test cells with scoring.
 7. **Diagnostic** optional: deeper checks.
 
-Uses ANTHROPIC_API_KEY for Claude generation where configured.
+Uses **ANTHROPIC_API_KEY** for Claude (creative: campaign ideation, offer/copy in campaign tester). Uses **GEMINI_API_KEY** for bulk/structured work (website extract, SQL analyst, filters).
 
 ## Troubleshooting
 - Empty contacts: run sync; confirm client keys and client_id linkage.
