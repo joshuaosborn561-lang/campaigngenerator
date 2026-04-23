@@ -56,11 +56,11 @@ export default function CampaignTesterListPage() {
 
   // Group by client name so the list reads like a book of work per client.
   const grouped = useMemo(() => {
-    const byClient = new Map<string, { name: string; rows: BriefRow[] }>();
+    const byClient = new Map<string, { name: string; clientId: string | null; rows: BriefRow[] }>();
     for (const b of briefs) {
       const key = b.client_id ?? "__none__";
       const name = b.clients?.name ?? "Unassigned / internal";
-      if (!byClient.has(key)) byClient.set(key, { name, rows: [] });
+      if (!byClient.has(key)) byClient.set(key, { name, clientId: b.client_id ?? null, rows: [] });
       byClient.get(key)!.rows.push(b);
     }
     return [...byClient.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -118,14 +118,43 @@ export default function CampaignTesterListPage() {
             <div key={group.name} style={{ marginBottom: 24 }}>
               <div
                 style={{
-                  fontSize: 11,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                  color: "var(--text-muted)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  flexWrap: "wrap",
                   margin: "8px 4px",
                 }}
               >
-                {group.name} — {group.rows.length} brief{group.rows.length === 1 ? "" : "s"}
+                <div
+                  style={{
+                    fontSize: 11,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
+                    color: "var(--text-muted)",
+                    flex: 1,
+                    minWidth: 200,
+                  }}
+                >
+                  {group.name} — {group.rows.length} brief{group.rows.length === 1 ? "" : "s"}
+                </div>
+                {group.clientId ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <Link
+                      className="btn"
+                      href={`/campaign-tester/new?client_id=${encodeURIComponent(group.clientId)}`}
+                      style={{ fontSize: 12, padding: "6px 12px" }}
+                    >
+                      + New brief
+                    </Link>
+                    <Link
+                      className="btn"
+                      href={`/campaign-tester/strategy?client_id=${encodeURIComponent(group.clientId)}`}
+                      style={{ fontSize: 12, padding: "6px 12px" }}
+                    >
+                      Client strategy
+                    </Link>
+                  </div>
+                ) : null}
               </div>
               <ul className="ct-list">
                 {group.rows.map((b) => (

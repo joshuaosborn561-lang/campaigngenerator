@@ -91,6 +91,36 @@ const EXTRACT_SCHEMA = {
   ],
 };
 
+export async function GET(req: NextRequest, ctx: Ctx) {
+  try {
+    const { strategyId } = await ctx.params;
+    const url = req.nextUrl.searchParams.get("website_url")?.trim() ?? "";
+
+    if (url) {
+      const { data, error } = await supabase
+        .from("strategy_website_analysis")
+        .select("*")
+        .eq("strategy_id", strategyId)
+        .eq("website_url", url)
+        .maybeSingle();
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ analysis: data ?? null });
+    }
+
+    const { data, error } = await supabase
+      .from("strategy_website_analysis")
+      .select("*")
+      .eq("strategy_id", strategyId)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const row = Array.isArray(data) ? data[0] ?? null : null;
+    return NextResponse.json({ analysis: row });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? "Failed to load analysis" }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest, ctx: Ctx) {
   try {
     const { strategyId } = await ctx.params;

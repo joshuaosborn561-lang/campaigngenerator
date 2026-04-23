@@ -43,6 +43,7 @@ function NewCampaignBriefContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const clientIdFromUrl = searchParams.get("client_id") ?? "";
+  const strategyIdFromUrl = searchParams.get("strategy_id") ?? "";
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,12 +92,21 @@ function NewCampaignBriefContent() {
       try {
         const res = await fetch(`/api/campaign-tester/strategies?client_id=${encodeURIComponent(clientId)}`);
         const data = await res.json();
-        setStrategies(data.strategies ?? []);
+        const list = data.strategies ?? [];
+        setStrategies(list);
+        if (list.length) {
+          const match =
+            strategyIdFromUrl && list.some((s: StrategyRow) => s.id === strategyIdFromUrl);
+          setStrategyId(match ? strategyIdFromUrl : list[0].id);
+        } else {
+          setStrategyId("");
+        }
       } catch {
         setStrategies([]);
+        setStrategyId("");
       }
     })();
-  }, [clientId]);
+  }, [clientId, strategyIdFromUrl]);
 
   // Load lanes + offers when strategy changes
   useEffect(() => {

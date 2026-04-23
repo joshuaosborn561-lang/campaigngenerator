@@ -144,6 +144,9 @@ export default function ClientHubPage({ params }: { params: Promise<{ id: string
               <Link href={`/chat?view=contacts&client_id=${encodeURIComponent(id)}`} className="btn btn-primary" style={{ textDecoration: "none" }}>
                 View prospects
               </Link>
+              <Link href={`/campaign-tester/strategy?client_id=${encodeURIComponent(id)}`} className="btn" style={{ textDecoration: "none" }}>
+                Client strategy
+              </Link>
               <Link href={`/campaign-tester/new?client_id=${encodeURIComponent(id)}`} className="btn" style={{ textDecoration: "none" }}>
                 New campaign brief
               </Link>

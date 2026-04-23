@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import AppSidebar from "@/components/AppSidebar";
 
@@ -49,7 +50,10 @@ type WebsiteAnalysisRow = {
   updated_at: string;
 };
 
-export default function ClientStrategyPage() {
+function ClientStrategyInner() {
+  const searchParams = useSearchParams();
+  const clientIdFromUrl = searchParams.get("client_id") ?? "";
+
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [clientId, setClientId] = useState("");
   const [strategies, setStrategies] = useState<StrategyRow[]>([]);
@@ -80,6 +84,10 @@ export default function ClientStrategyPage() {
   }, []);
 
   useEffect(() => {
+    if (clientIdFromUrl) setClientId(clientIdFromUrl);
+  }, [clientIdFromUrl]);
+
+  useEffect(() => {
     if (!clientId) {
       setStrategies([]);
       setStrategyId("");
@@ -88,6 +96,7 @@ export default function ClientStrategyPage() {
       setLoading(false);
       return;
     }
+    setStrategyId("");
     (async () => {
       setLoading(true);
       setError(null);
@@ -95,7 +104,9 @@ export default function ClientStrategyPage() {
         const res = await fetch(`/api/campaign-tester/strategies?client_id=${encodeURIComponent(clientId)}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load strategies");
-        setStrategies(data.strategies ?? []);
+        const list = data.strategies ?? [];
+        setStrategies(list);
+        if (list.length) setStrategyId(list[0].id);
       } catch (e) {
         setStrategies([]);
         setError(e instanceof Error ? e.message : "Failed to load strategies");
@@ -303,6 +314,9 @@ export default function ClientStrategyPage() {
     <div className="app-layout">
       <AppSidebar active="tester" />
       <div className="ct-shell">
+        <div className="ct-crumbs" style={{ marginBottom: 6 }}>
+          <Link href="/campaign-tester">Campaign Testing Machine</Link> / Client strategy
+        </div>
         <div className="ct-header">
           <h1>Client Strategy</h1>
           <div className="ct-sub">
@@ -347,7 +361,11 @@ export default function ClientStrategyPage() {
                 </button>
               </div>
               <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-                After creating one, go to <Link href="/campaign-tester/new">New Campaign</Link> to spawn briefs.
+                After creating one, go to{" "}
+                <Link href={clientId ? `/campaign-tester/new?client_id=${encodeURIComponent(clientId)}` : "/campaign-tester/new"}>
+                  New Campaign
+                </Link>{" "}
+                to spawn briefs.
               </p>
             </div>
           </div>
@@ -469,7 +487,10 @@ export default function ClientStrategyPage() {
                         <div className="ct-list-label">{o.name}</div>
                         <div className="ct-list-sub">{o.one_liner}</div>
                       </div>
-                      <Link className="btn" href={`/campaign-tester/new?client_id=${encodeURIComponent(clientId)}`}>
+                      <Link
+                        className="btn"
+                        href={`/campaign-tester/new?client_id=${encodeURIComponent(clientId)}&strategy_id=${encodeURIComponent(strategyId)}`}
+                      >
                         Use
                       </Link>
                     </li>
@@ -484,3 +505,19 @@ export default function ClientStrategyPage() {
   );
 }
 
+export default function ClientStrategyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="app-layout">
+          <AppSidebar active="tester" />
+          <div className="ct-shell">
+            <p style={{ color: "var(--text-muted)" }}>Loading…</p>
+          </div>
+        </div>
+      }
+    >
+      <ClientStrategyInner />
+    </Suspense>
+  );
+}
