@@ -10,13 +10,6 @@ const ICON_ANALYST = (
   </svg>
 );
 
-const ICON_INTEL = (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="8" />
-    <path d="m21 21-4.35-4.35" />
-  </svg>
-);
-
 const ICON_TESTER = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M10 2v7.31" />
@@ -47,7 +40,6 @@ export type SidebarActive =
   | "home"
   | "clients"
   | "chat"
-  | "intelligence"
   | "tester";
 
 export default function AppSidebar({ active }: { active: SidebarActive }) {
@@ -70,16 +62,9 @@ export default function AppSidebar({ active }: { active: SidebarActive }) {
       <Link
         href="/chat"
         className={`sidebar-nav-item${active === "chat" ? " active" : ""}`}
-        title="AI Analyst"
+        title="AI Analyst (Ask + search prospects)"
       >
         {ICON_ANALYST}
-      </Link>
-      <Link
-        href="/intelligence"
-        className={`sidebar-nav-item${active === "intelligence" ? " active" : ""}`}
-        title="Intelligence"
-      >
-        {ICON_INTEL}
       </Link>
       <Link
         href="/campaign-tester"

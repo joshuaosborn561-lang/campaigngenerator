@@ -106,7 +106,11 @@ function ChatPageInner() {
       <ContactsWorkspace
         sidebarActive="chat"
         basePath="/chat"
-        onBackToAsk={() => setAnalystTab("ask")}
+        analystTabBar={{
+          active: "search",
+          onSelectAsk: () => setAnalystTab("ask"),
+          onSelectSearch: () => setAnalystTab("contacts"),
+        }}
       />
     );
   }
@@ -120,7 +124,7 @@ function ChatPageInner() {
           <div style={{ flex: 1, minWidth: 200 }}>
             <h1 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>AI Analyst</h1>
             <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--text-muted)" }}>
-              Ask Gemini about campaigns — or open <strong>Prospects</strong> to search people synced from SmartLead & HeyReach
+              Ask Gemini about your warehouse — or use <strong>Search</strong> to filter prospects from SmartLead &amp; HeyReach
             </p>
           </div>
           <div className="analyst-tabs" role="tablist" aria-label="AI Analyst sections">
@@ -140,7 +144,7 @@ function ChatPageInner() {
               className="analyst-tab"
               onClick={() => setAnalystTab("contacts")}
             >
-              Prospects
+              Search
             </button>
           </div>
           {messages.length > 0 && (

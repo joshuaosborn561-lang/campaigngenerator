@@ -8,7 +8,7 @@ export const PRODUCT_GUIDE_KNOWLEDGE = `
 A central warehouse (Supabase) for SmartLead + HeyReach campaign data, with:
 - **Clients**: each row stores API keys and vertical; nightly sync pulls that client's campaigns into shared tables.
 - **Contacts**: deduplicated people with lead-database-style filters, CSV export.
-- **AI analyst** (/chat): asks natural-language questions; Gemini queries campaign/contact/Calendly data via tools.
+- **AI Analyst** (/chat): one place for **Ask** (Gemini on warehouse data) and **Search** (prospect table + filters + NL→filters from SmartLead/HeyReach). The /contacts and /intelligence routes redirect into /chat.
 - **Campaign tester**: wizard from brief → ICP → infrastructure → offers → six structured copy tests.
 - **Calendly webhooks** (/api/webhooks/calendly): verified meetings in \`calendly_events\`; use CALENDLY_ACCOUNT_MAP for agency vs client orgs.
 
@@ -22,7 +22,7 @@ A central warehouse (Supabase) for SmartLead + HeyReach campaign data, with:
 - AI bar can translate natural language into filters.
 - Export selected or filtered rows to CSV.
 
-## AI analyst (/chat)
+## AI Analyst (/chat)
 - Data-grounded answers using Gemini + Supabase tools (not generic marketing advice).
 - Ask about reply rates, subject lines, industries, Calendly-verified meetings, etc.
 

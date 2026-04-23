@@ -142,7 +142,7 @@ export default function ClientHubPage({ params }: { params: Promise<{ id: string
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
               <Link href={`/chat?view=contacts&client_id=${encodeURIComponent(id)}`} className="btn btn-primary" style={{ textDecoration: "none" }}>
-                View prospects
+                AI Analyst — search
               </Link>
               <Link href={`/campaign-tester/strategy?client_id=${encodeURIComponent(id)}`} className="btn" style={{ textDecoration: "none" }}>
                 Client strategy
@@ -151,7 +151,7 @@ export default function ClientHubPage({ params }: { params: Promise<{ id: string
                 New campaign brief
               </Link>
               <Link href="/chat" className="btn" style={{ textDecoration: "none" }}>
-                AI analyst
+                AI Analyst — ask
               </Link>
             </div>
 
