@@ -18,6 +18,11 @@ import { InferenceService, enrichLeadFields } from "./services/inference.js";
 import { runInferenceForClient } from "./services/inference-runner.js";
 import { parseLocation } from "./utils/title-parser.js";
 import { computeLeadEngagementFlags } from "./utils/lead-engagement.js";
+import {
+  hasAnyOutreachKey,
+  resolveHeyReachApiKey,
+  resolveSmartLeadApiKey,
+} from "./utils/sync-credentials.js";
 import pLimit from "p-limit";
 import type { DBClient } from "./types/index.js";
 
@@ -36,7 +41,9 @@ const SINCE_DATE = new Date(Date.now() - 48 * 60 * 60 * 1000);
 // ---- SmartLead nightly sync (extracted) ----
 
 async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
-    const smartlead = new SmartLeadClient(client.smartlead_api_key!);
+    const slKey = resolveSmartLeadApiKey(client);
+    if (!slKey) return { campaignsSynced: 0, leadsSynced: 0 };
+    const smartlead = new SmartLeadClient(slKey);
 
   let campaignsSynced = 0;
     let leadsSynced = 0;
@@ -147,6 +154,8 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
       try {
               const leads = await smartlead.getAllCampaignLeads(slCampaign.id);
               for (const slLead of leads) {
+                        const email = typeof slLead.email === "string" ? slLead.email.trim() : "";
+                        if (!email) continue;
                         const sentiment = mapCategoryToSentiment(slLead.category);
                         const engagement = computeLeadEngagementFlags({
                           category: slLead.category,
@@ -164,8 +173,8 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
                         });
                         await store.upsertLead({
                                     campaign_id: dbCampaign.id,
-                                    smartlead_lead_id: slLead.id,
-                                    email: slLead.email,
+                                    smartlead_lead_id: Number(slLead.id),
+                                    email,
                                     first_name: slLead.first_name,
                                     last_name: slLead.last_name,
                                     company: slLead.company_name,
@@ -184,8 +193,11 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
                         });
                         leadsSynced++;
               }
-      } catch {
-              // Lead fetch may fail for some campaigns
+      } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn(
+                `  [${client.name}][SmartLead] could not process leads for ${slCampaign.name}: ${msg}`
+              );
       }
 
       campaignsSynced++;
@@ -197,7 +209,9 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
 // ---- HeyReach nightly sync ----
 
 async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
-    const heyreach = new HeyReachClient(client.heyreach_api_key!);
+    const hrKey = resolveHeyReachApiKey(client);
+    if (!hrKey) return { campaignsSynced: 0, leadsSynced: 0 };
+    const heyreach = new HeyReachClient(hrKey);
 
   // Validate API key first
   const keyValid = await heyreach.checkApiKey();
@@ -285,30 +299,54 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
               const pageLimit = 50;
               let hasMore = true;
               let reachedOldData = false;
+              const MAX_NIGHTLY_CONV_PAGES = 100;
+              let convPage = 0;
 
           while (hasMore && !reachedOldData) {
-                    const convResponse = await heyreach.getConversations(hrCampaign.id, offset, pageLimit);
-                    const conversations = convResponse?.items ?? convResponse ?? [];
+                    if (convPage >= MAX_NIGHTLY_CONV_PAGES) {
+                        break;
+                    }
+                    convPage++;
+                    const convResponse = await heyreach.getConversations(
+                        hrCampaign.id,
+                        offset,
+                        pageLimit
+                    );
+                    const conversations = convResponse?.items ?? [];
+                    const totalC = convResponse?.totalCount;
                     if (!Array.isArray(conversations) || conversations.length === 0) break;
 
-                for (const conv of conversations) {
+                for (const conv of conversations as unknown[]) {
+                            const c = conv as Record<string, unknown>;
                             // Filter by date — only process conversations with recent activity
-                      const lastActivityTime = conv.lastActivityAt ?? conv.updatedAt ?? conv.createdAt;
+                      const lastActivityTime =
+                        c.lastMessageAt ?? c.lastActivityAt ?? c.updatedAt ?? c.createdAt;
                             if (lastActivityTime) {
-                                          const activityDate = new Date(lastActivityTime);
+                                          const activityDate = new Date(
+                                            lastActivityTime as string | number | Date
+                                          );
                                           if (activityDate < SINCE_DATE) {
                                                           reachedOldData = true;
                                                           break;
                                           }
                             }
 
-                      const lead = conv.lead ?? conv;
-                            const linkedInUrl = lead.linkedInUrl ?? lead.profileUrl ?? "";
-                            const email = lead.email ?? "";
-                            const firstName = lead.firstName ?? "";
-                            const lastName = lead.lastName ?? "";
-                            const companyName = lead.companyName ?? "";
-                            const title = lead.title ?? "";
+                      const prof = c.correspondentProfile;
+                            const L = (
+                              prof && typeof prof === "object"
+                                ? (prof as Record<string, unknown>)
+                                : (c.lead as Record<string, unknown> | undefined) ?? c
+                            ) as Record<string, unknown>;
+                            const linkedInUrl = (L.profileUrl ?? L.linkedInUrl ?? "") as string;
+                            const email = (
+                              (L.emailAddress ??
+                                L.enrichedEmailAddress ??
+                                L.customEmailAddress ??
+                                L.email) as string) || "";
+                            const firstName = (L.firstName ?? "") as string;
+                            const lastName = (L.lastName ?? "") as string;
+                            const companyName = (L.companyName ?? "") as string;
+                            const title = (L.position ?? L.headline ?? "") as string;
 
                       if (!email && !linkedInUrl) continue;
 
@@ -327,13 +365,18 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
                       await store.linkContactToCampaign(dbContact.id, dbCampaign.id, undefined, "active");
 
                       // Count engagement from conversation messages
-                      const messages = conv.messages ?? [];
+                      const messages = (c.messages as unknown[] | undefined) ?? [];
                             let sentCount = 0;
                             let replyCount = 0;
                             for (const msg of messages) {
-                                          if (msg.direction === "outbound" || msg.type === "sent") {
+                                          const m = msg as Record<string, unknown>;
+                                          if (m.sender === "ME") {
                                                           sentCount++;
-                                          } else if (msg.direction === "inbound" || msg.type === "reply") {
+                                          } else if (m.sender != null) {
+                                                          replyCount++;
+                                          } else if (m.direction === "outbound" || m.type === "sent") {
+                                                          sentCount++;
+                                          } else if (m.direction === "inbound" || m.type === "reply") {
                                                           replyCount++;
                                           }
                             }
@@ -350,11 +393,17 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
                 if (conversations.length < pageLimit) {
                             hasMore = false;
                 } else {
-                            offset += pageLimit;
+                            offset += conversations.length;
+                }
+                if (typeof totalC === "number" && offset >= totalC) {
+                        hasMore = false;
                 }
           }
-      } catch {
-              // Conversation fetch may fail for some campaigns
+      } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn(
+                `  [${client.name}][HeyReach] conversation fetch: ${hrCampaign.name}: ${msg}`
+              );
       }
 
       campaignsSynced++;
@@ -381,7 +430,7 @@ async function syncClient(client: DBClient): Promise<ClientSyncResult> {
         console.log(`\n--- Nightly sync: ${client.name} ---`);
 
       // SmartLead sync
-      if (client.smartlead_api_key) {
+      if (resolveSmartLeadApiKey(client)) {
               try {
                         const result = await syncSmartLeadForClient(client, store);
                         totalCampaigns += result.campaignsSynced;
@@ -392,7 +441,7 @@ async function syncClient(client: DBClient): Promise<ClientSyncResult> {
       }
 
       // HeyReach sync
-      if (client.heyreach_api_key) {
+      if (resolveHeyReachApiKey(client)) {
               try {
                         const result = await syncHeyReachForClient(client, store);
                         totalCampaigns += result.campaignsSynced;
@@ -402,7 +451,7 @@ async function syncClient(client: DBClient): Promise<ClientSyncResult> {
               }
       }
 
-      if (!client.smartlead_api_key && !client.heyreach_api_key) {
+      if (!hasAnyOutreachKey(client)) {
               console.warn(`  Skipping ${client.name}: no API keys configured`);
       }
 

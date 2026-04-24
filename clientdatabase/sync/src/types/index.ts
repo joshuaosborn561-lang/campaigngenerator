@@ -25,7 +25,8 @@ export interface SmartLeadVariant {
 }
 
 export interface SmartLeadLead {
-    id: number;
+    // API may return id as string in paginated /leads response
+    id: number | string;
     email: string;
     first_name?: string;
     last_name?: string;

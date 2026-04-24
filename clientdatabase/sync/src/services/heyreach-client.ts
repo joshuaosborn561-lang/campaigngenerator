@@ -65,12 +65,17 @@ export class HeyReachClient {
     const maxRetries = 3;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const resp = await this.api.request<T>({
+        const config: Parameters<AxiosInstance["request"]>[0] = {
           method,
           url: path,
-          params,
-          data,
-        });
+        };
+        if (method === "get") {
+          config.params = params;
+        } else {
+          const body = data !== undefined ? data : params;
+          config.data = body && Object.keys(body as object).length ? body : params;
+        }
+        const resp = await this.api.request<T>(config);
         return resp.data;
       } catch (err: any) {
         const status = err?.response?.status;
@@ -92,15 +97,37 @@ export class HeyReachClient {
 
   // ---- Campaigns ----
 
+  private extractCampaignList(raw: unknown): HeyReachCampaign[] {
+    if (Array.isArray(raw)) {
+      return raw as HeyReachCampaign[];
+    }
+    if (raw && typeof raw === "object") {
+      const o = raw as Record<string, unknown>;
+      if (Array.isArray(o.data)) {
+        return o.data as HeyReachCampaign[];
+      }
+      if (o.data && typeof o.data === "object") {
+        const d = o.data as Record<string, unknown>;
+        if (Array.isArray(d.items)) return d.items as HeyReachCampaign[];
+      }
+      if (Array.isArray(o.items)) {
+        return o.items as HeyReachCampaign[];
+      }
+    }
+    return [];
+  }
+
   async getCampaigns(
     offset = 0,
     limit = 50
   ): Promise<{ items: HeyReachCampaign[]; hasMore: boolean }> {
-    return this.request<{ items: HeyReachCampaign[]; hasMore: boolean }>(
-      "get",
-      "/get-all-campaigns",
-      { offset, limit }
-    );
+    const raw = await this.request<unknown>("post", "/campaign/GetAll", {
+      offset,
+      limit,
+    });
+    const items = this.extractCampaignList(raw);
+    const hasMore = items.length >= limit;
+    return { items, hasMore };
   }
 
   async getAllCampaigns(): Promise<HeyReachCampaign[]> {
@@ -110,10 +137,10 @@ export class HeyReachClient {
 
     while (true) {
       const resp = await this.getCampaigns(offset, limit);
-      const items = resp.items ?? (resp as unknown as HeyReachCampaign[]);
+      const { items, hasMore } = resp;
       if (!items || items.length === 0) break;
       all.push(...items);
-      if (!resp.hasMore || items.length < limit) break;
+      if (!hasMore || items.length < limit) break;
       offset += limit;
     }
 
@@ -121,15 +148,17 @@ export class HeyReachClient {
   }
 
   async getCampaignDetails(campaignId: number): Promise<any> {
-    return this.request<any>("get", `/get-campaign-details`, {
-      campaignId,
-    });
+    return this.request<any>("get", "/campaign/GetById", { campaignId });
   }
 
   async getCampaignAnalytics(campaignId: number): Promise<any> {
-    return this.request<any>("get", `/get-campaign-analytics`, {
-      campaignId,
-    });
+    try {
+      return await this.request<any>("post", "/stats/GetOverallStats", {
+        campaignId,
+      });
+    } catch {
+      return null;
+    }
   }
 
   // ---- Leads ----
@@ -146,11 +175,21 @@ export class HeyReachClient {
     offset = 0,
     limit = 50
   ): Promise<{ items: HeyReachList[]; hasMore: boolean }> {
-    return this.request<{ items: HeyReachList[]; hasMore: boolean }>(
-      "get",
-      "/get-all-lists",
-      { offset, limit }
-    );
+    const raw = await this.request<unknown>("post", "/list/GetAll", { offset, limit });
+    const items = (() => {
+      if (Array.isArray(raw)) return raw as HeyReachList[];
+      if (raw && typeof raw === "object") {
+        const o = raw as Record<string, unknown>;
+        if (Array.isArray(o.data)) return o.data as HeyReachList[];
+        if (o.data && typeof o.data === "object") {
+          const d = o.data as Record<string, unknown>;
+          if (Array.isArray(d.items)) return d.items as HeyReachList[];
+        }
+        if (Array.isArray(o.items)) return o.items as HeyReachList[];
+      }
+      return [] as HeyReachList[];
+    })();
+    return { items, hasMore: items.length >= limit };
   }
 
   async getAllLists(): Promise<HeyReachList[]> {
@@ -176,16 +215,41 @@ export class HeyReachClient {
     campaignId?: number,
     offset = 0,
     limit = 50
-  ): Promise<any> {
-    const params: Record<string, unknown> = { offset, limit };
-    if (campaignId) params.campaignId = campaignId;
-    return this.request<any>("get", "/get-conversations", params);
+  ): Promise<{ items: unknown[]; totalCount?: number }> {
+    const raw = await this.request<unknown>("post", "/inbox/GetConversationsV2", {
+      offset,
+      limit,
+      campaignId: campaignId ?? null,
+    });
+    const items = (() => {
+      if (Array.isArray(raw)) return raw;
+      if (raw && typeof raw === "object") {
+        const o = raw as Record<string, unknown>;
+        if (Array.isArray(o.items)) return o.items;
+        if (o.data && typeof o.data === "object") {
+          const d = o.data as Record<string, unknown>;
+          if (Array.isArray(d.items)) return d.items;
+        }
+        if (Array.isArray(o.data)) return o.data;
+      }
+      return [];
+    })();
+    let totalCount: number | undefined;
+    if (raw && typeof raw === "object") {
+      const tc = (raw as { totalCount?: number }).totalCount;
+      if (typeof tc === "number") {
+        totalCount = tc;
+      } else if (typeof tc === "string" && /^\d+$/.test(tc)) {
+        totalCount = Number(tc);
+      }
+    }
+    return { items, totalCount };
   }
 
   // ---- Stats ----
 
   async getOverallStats(): Promise<any> {
-    return this.request<any>("get", "/get-overall-stats");
+    return this.request<any>("post", "/stats/GetOverallStats", {});
   }
 
   // ---- LinkedIn Accounts ----
@@ -198,7 +262,7 @@ export class HeyReachClient {
 
   async checkApiKey(): Promise<boolean> {
     try {
-      await this.request<any>("get", "/check-api-key");
+      await this.request<any>("get", "/auth/CheckApiKey");
       return true;
     } catch {
       return false;

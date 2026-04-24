@@ -18,7 +18,7 @@ function RedirectToAnalystContacts() {
 
   return (
     <div className="app-layout" style={{ alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <p style={{ color: "var(--text-muted)" }}>Opening prospects…</p>
+      <p style={{ color: "var(--text-muted)" }}>Opening AI Analyst (Search)…</p>
     </div>
   );
 }

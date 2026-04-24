@@ -10,10 +10,14 @@ const ICON_ANALYST = (
   </svg>
 );
 
-const ICON_INTEL = (
+const ICON_LISTS = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="8" />
-    <path d="m21 21-4.35-4.35" />
+    <line x1="8" y1="6" x2="21" y2="6" />
+    <line x1="8" y1="12" x2="21" y2="12" />
+    <line x1="8" y1="18" x2="21" y2="18" />
+    <line x1="3" y1="6" x2="3.01" y2="6" />
+    <line x1="3" y1="12" x2="3.01" y2="12" />
+    <line x1="3" y1="18" x2="3.01" y2="18" />
   </svg>
 );
 
@@ -47,7 +51,7 @@ export type SidebarActive =
   | "home"
   | "clients"
   | "chat"
-  | "intelligence"
+  | "lists"
   | "tester";
 
 export default function AppSidebar({ active }: { active: SidebarActive }) {
@@ -70,16 +74,16 @@ export default function AppSidebar({ active }: { active: SidebarActive }) {
       <Link
         href="/chat"
         className={`sidebar-nav-item${active === "chat" ? " active" : ""}`}
-        title="AI Analyst"
+        title="AI Analyst (Ask + search prospects)"
       >
         {ICON_ANALYST}
       </Link>
       <Link
-        href="/intelligence"
-        className={`sidebar-nav-item${active === "intelligence" ? " active" : ""}`}
-        title="Intelligence"
+        href="/list-pipeline"
+        className={`sidebar-nav-item${active === "lists" ? " active" : ""}`}
+        title="List pipeline (Sales Nav + Outscraper → Clay)"
       >
-        {ICON_INTEL}
+        {ICON_LISTS}
       </Link>
       <Link
         href="/campaign-tester"

@@ -84,6 +84,12 @@ export type ContactsWorkspaceProps = {
   basePath?: string;
   /** When set, shows a control to return to the Ask tab (AI Analyst). */
   onBackToAsk?: () => void;
+  /** Same Ask / Search chrome as /chat so prospect search feels unified with the analyst. */
+  analystTabBar?: {
+    active: "ask" | "search";
+    onSelectAsk: () => void;
+    onSelectSearch: () => void;
+  };
 };
 
 // ─── Component ───────────────────────────────────────────────
@@ -91,6 +97,7 @@ export function ContactsWorkspace({
   sidebarActive = "chat",
   basePath = "/chat",
   onBackToAsk,
+  analystTabBar,
 }: ContactsWorkspaceProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -309,7 +316,7 @@ export function ContactsWorkspace({
 
       {/* Filter sidebar */}
       <aside className="filter-panel">
-        {onBackToAsk && (
+        {onBackToAsk && !analystTabBar && (
           <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)" }}>
             <button type="button" className="btn" style={{ width: "100%", fontSize: 12 }} onClick={onBackToAsk}>
               ← Ask data
@@ -449,6 +456,47 @@ export function ContactsWorkspace({
 
       {/* Main content */}
       <div className="content-area">
+        {analystTabBar && (
+          <div
+            className="top-bar"
+            style={{
+              flexWrap: "wrap",
+              gap: 10,
+              alignItems: "flex-start",
+              borderBottom: "1px solid var(--border)",
+              paddingBottom: 12,
+              marginBottom: 0,
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <h1 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>AI Analyst</h1>
+              <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--text-muted)" }}>
+                Ask about campaign data or search prospects synced from SmartLead &amp; HeyReach
+              </p>
+            </div>
+            <div className="analyst-tabs" role="tablist" aria-label="AI Analyst sections">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={analystTabBar.active === "ask"}
+                className={`analyst-tab${analystTabBar.active === "ask" ? " analyst-tab-active" : ""}`}
+                onClick={analystTabBar.onSelectAsk}
+              >
+                Ask
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={analystTabBar.active === "search"}
+                className={`analyst-tab${analystTabBar.active === "search" ? " analyst-tab-active" : ""}`}
+                onClick={analystTabBar.onSelectSearch}
+              >
+                Search
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Top bar with search + AI */}
         <div className="top-bar">
           <div className="search-box">

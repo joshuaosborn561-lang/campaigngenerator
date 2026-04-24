@@ -7,3 +7,9 @@ Thumbs.db
 
 # Supabase CLI local state (link metadata; can include connection hints)
 clientdatabase/supabase/.temp/
+supabase/.temp/
+
+# Local env (secrets)
+.env
+.env.local
+**/.env.local

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import AppSidebar from "@/components/AppSidebar";
+import ListPipelinePanel, { type ListPipelineContext } from "@/components/list-pipeline-panel";
 
 interface ClientRow {
   id: string;
@@ -207,6 +208,32 @@ function NewCampaignBriefContent() {
     }
   }
 
+  const outscraperContext: ListPipelineContext = useMemo(
+    () => ({
+      campaignName: name.trim() || undefined,
+      clientName: clients.find((c) => c.id === clientId)?.name,
+      clientId: clientId || undefined,
+      strategyId: strategyId || undefined,
+      strategyName: strategies.find((s) => s.id === strategyId)?.name,
+      laneName: lanes.find((l) => l.id === laneId)?.name,
+      offerName: offers.find((o) => o.id === offerId)?.name,
+      ideaName: ideaId ? ideas.find((i) => i.id === ideaId)?.name : undefined,
+    }),
+    [
+      name,
+      clients,
+      clientId,
+      strategyId,
+      strategies,
+      laneId,
+      lanes,
+      offerId,
+      offers,
+      ideaId,
+      ideas,
+    ]
+  );
+
   return (
     <div className="app-layout">
       <AppSidebar active="tester" />
@@ -356,6 +383,21 @@ function NewCampaignBriefContent() {
             </button>
           </div>
         </form>
+
+        <div className="ct-card" style={{ marginTop: 24 }}>
+          <h2>List pipeline (Sales Nav + Outscraper → Clay)</h2>
+          <p className="ct-sub" style={{ marginBottom: 0 }}>
+            Generate state-sharded Sales Navigator people URLs, or run a local Google Maps search
+            and forward rows to Clay. When you use Outscraper from here, Clay gets fields for
+            this draft (client, strategy, lane, offer, campaign name) when you fill them
+            in above. Full-page version: <Link href="/list-pipeline">List pipeline</Link>.
+          </p>
+          <ListPipelinePanel
+            className="list-pipeline-embedded"
+            variant="embedded"
+            outscraperContext={outscraperContext}
+          />
+        </div>
       </div>
     </div>
   );
