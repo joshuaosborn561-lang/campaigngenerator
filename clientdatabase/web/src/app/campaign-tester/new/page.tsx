@@ -27,6 +27,24 @@ type PastBrief = {
   created_at: string;
 };
 
+type ClientInsights = {
+  syncNote: string | null;
+  platforms: {
+    smartlead: { campaigns: number; leadRows: number; replied: number; meetings: number; avgReplyRate: number | null };
+    heyreach: { campaigns: number; leadRows: number; replied: number; meetings: number; avgReplyRate: number | null };
+    total: { leadRows: number; replied: number; meetings: number };
+  };
+  topCampaigns: {
+    name: string | null;
+    source_platform: string | null;
+    reply_rate: number | null;
+    positive_replies: number | null;
+    sends: number | null;
+  }[];
+  offers: { id: string; name: string; briefs_spawned: number; reply_success_hint: string }[];
+  briefs: PastBrief[];
+};
+
 interface ClientRow {
   id: string;
   name: string;
@@ -71,8 +89,8 @@ function NewCampaignBriefContent() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [strategyBootstrapping, setStrategyBootstrapping] = useState(false);
-  const [pastBriefs, setPastBriefs] = useState<PastBrief[]>([]);
-  const [loadingPastBriefs, setLoadingPastBriefs] = useState(false);
+  const [insights, setInsights] = useState<ClientInsights | null>(null);
+  const [loadingInsights, setLoadingInsights] = useState(false);
 
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [clientId, setClientId] = useState<string>("");
@@ -112,25 +130,24 @@ function NewCampaignBriefContent() {
     })();
   }, []);
 
-  // When adding another campaign, show prior briefs for context (no LLM "what worked" yet — that is a future pass)
   useEffect(() => {
     if (mode !== "add-campaign" || !clientId) {
-      setPastBriefs([]);
+      setInsights(null);
       return;
     }
     (async () => {
-      setLoadingPastBriefs(true);
+      setLoadingInsights(true);
       try {
         const res = await fetch(
-          `/api/campaign-tester/briefs?client_id=${encodeURIComponent(clientId)}`
+          `/api/campaign-tester/client-insights?client_id=${encodeURIComponent(clientId)}`
         );
-        const data = await res.json();
-        const rows: PastBrief[] = (data.briefs ?? []).map((b: PastBrief) => b);
-        setPastBriefs(rows);
+        const d = (await res.json()) as ClientInsights;
+        if (!res.ok) throw new Error("insights");
+        setInsights(d);
       } catch {
-        setPastBriefs([]);
+        setInsights(null);
       } finally {
-        setLoadingPastBriefs(false);
+        setLoadingInsights(false);
       }
     })();
   }, [mode, clientId]);
@@ -486,28 +503,72 @@ function NewCampaignBriefContent() {
                 className="ct-card"
                 style={{ background: "var(--bg-tertiary)", marginTop: 14, padding: 12, border: "1px solid var(--border)" }}
               >
-                <h3 style={{ fontSize: 12, fontWeight: 600, margin: "0 0 8px" }}>Previous campaigns (this client)</h3>
-                {loadingPastBriefs ? (
+                <h3 style={{ fontSize: 12, fontWeight: 600, margin: "0 0 8px" }}>What we know (sync + past briefs)</h3>
+                {loadingInsights ? (
                   <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading…</p>
-                ) : pastBriefs.length === 0 ? (
-                  <p style={{ fontSize: 12, color: "var(--text-muted)" }}>No briefs yet for this client.</p>
+                ) : !insights ? (
+                  <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Could not load.</p>
                 ) : (
-                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: "var(--text-secondary)" }}>
-                    {pastBriefs.slice(0, 8).map((b) => (
-                      <li key={b.id} style={{ marginBottom: 4 }}>
-                        <Link href={`/campaign-tester/${b.id}`}>{b.name}</Link>{" "}
-                        <span style={{ color: "var(--text-muted)" }}>
-                          — {b.status} · {new Date(b.created_at).toLocaleDateString()}
-                        </span>
-                      </li>
-                    ))}
-                    {pastBriefs.length > 8 ? <li>…and {pastBriefs.length - 8} more</li> : null}
-                  </ul>
+                  <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                    {insights.syncNote && (
+                      <p className="ct-alert ct-alert-warn" style={{ marginTop: 0, marginBottom: 8 }}>
+                        {insights.syncNote}
+                      </p>
+                    )}
+                    <p style={{ margin: "0 0 6px" }}>
+                      <strong>SmartLead in DB</strong> — {insights.platforms.smartlead.campaigns} campaign(s),{" "}
+                      {insights.platforms.smartlead.leadRows} lead row(s), weighted reply rate{" "}
+                      {insights.platforms.smartlead.avgReplyRate != null
+                        ? `${insights.platforms.smartlead.avgReplyRate.toFixed(1)}%`
+                        : "n/a"}
+                    </p>
+                    <p style={{ margin: "0 0 6px" }}>
+                      <strong>HeyReach in DB</strong> — {insights.platforms.heyreach.campaigns} campaign(s),{" "}
+                      {insights.platforms.heyreach.leadRows} lead row(s){" "}
+                    </p>
+                    {insights.topCampaigns && insights.topCampaigns.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Top by positive replies (live)</div>
+                        <ul style={{ margin: 0, paddingLeft: 16 }}>
+                          {insights.topCampaigns.slice(0, 5).map((c, i) => (
+                            <li key={i}>
+                              {c.name} ({c.source_platform || "—"}) — {c.positive_replies ?? 0}+, reply%{" "}
+                              {c.reply_rate != null ? c.reply_rate.toFixed(1) : "n/a"} · sends {c.sends ?? "—"}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {insights.offers && insights.offers.length > 0 && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Strategy offers</div>
+                        <ul style={{ margin: 0, paddingLeft: 16 }}>
+                          {insights.offers.slice(0, 6).map((o) => (
+                            <li key={o.id}>
+                              {o.name} — {o.briefs_spawned} prior brief(s) · {o.reply_success_hint}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {insights.briefs && insights.briefs.length > 0 && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Recent briefs</div>
+                        <ul style={{ margin: 0, paddingLeft: 16 }}>
+                          {insights.briefs.slice(0, 6).map((b) => (
+                            <li key={b.id}>
+                              <Link href={`/campaign-tester/${b.id}`}>{b.name}</Link> — {b.status} ·{" "}
+                              {new Date(b.created_at).toLocaleDateString()}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 10, marginBottom: 0 }}>
+                      Tighter offer ↔ reply attribution (brief → live campaign) is a follow-up join.
+                    </p>
+                  </div>
                 )}
-                <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8, marginBottom: 0 }}>
-                  We will surface which offers/angles are over- or under-indexing on replies once
-                  that pipeline is connected; for now, use this list to avoid duplicate angles.
-                </p>
               </div>
             )}
             <div className="ct-wizard-nav">

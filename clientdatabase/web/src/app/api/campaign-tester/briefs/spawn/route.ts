@@ -140,8 +140,17 @@ export async function POST(req: NextRequest) {
         },
       ],
 
-      // Carry down assets/constraints for Claude prompts
-      available_assets: strategy.available_assets ?? {},
+      // Carry down assets; attach onboarding pack if present (guarded in DB column available_assets)
+      available_assets: {
+        ...(typeof strategy.available_assets === "object" && strategy.available_assets
+          ? (strategy.available_assets as Record<string, unknown>)
+          : {}),
+        strategy_onboarding: (() => {
+          const c = (strategy as { constraints?: { salesglider_wizard?: { data?: unknown } } | null })
+            .constraints;
+          return c?.salesglider_wizard?.data ?? null;
+        })(),
+      },
 
       status: "in_progress",
     };

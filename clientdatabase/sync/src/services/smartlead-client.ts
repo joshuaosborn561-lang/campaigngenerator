@@ -6,6 +6,7 @@ import type {
   SmartLeadCampaignStats,
   SmartLeadMessage,
 } from "../types/index.js";
+import { getSmartLeadCampaignListParams } from "../utils/sync-credentials.js";
 
 const BASE_URL = "https://server.smartlead.ai/api/v1";
 const RATE_LIMIT_DELAY = 650; // ~90 req/min to stay under 100/min limit
@@ -70,8 +71,27 @@ export class SmartLeadClient {
 
   // ---- Campaigns ----
 
+  /** Unwraps SmartLead response: array, `{ campaigns: [] }`, or empty on parse failure. */
+  private normalizeCampaignListResponse(raw: unknown): SmartLeadCampaign[] {
+    if (Array.isArray(raw)) {
+      return raw as SmartLeadCampaign[];
+    }
+    if (raw && typeof raw === "object") {
+      const o = raw as Record<string, unknown>;
+      if (Array.isArray(o.campaigns)) {
+        return o.campaigns as SmartLeadCampaign[];
+      }
+      if (o.data && Array.isArray((o as { data: unknown[] }).data)) {
+        return (o as { data: SmartLeadCampaign[] }).data;
+      }
+    }
+    return [];
+  }
+
   async getCampaigns(): Promise<SmartLeadCampaign[]> {
-    return this.request<SmartLeadCampaign[]>("get", "/campaigns");
+    const extra = getSmartLeadCampaignListParams() ?? {};
+    const raw = await this.request<unknown>("get", "/campaigns", extra);
+    return this.normalizeCampaignListResponse(raw);
   }
 
   async getCampaign(campaignId: number): Promise<SmartLeadCampaign> {

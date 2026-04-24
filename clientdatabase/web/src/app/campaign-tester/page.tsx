@@ -83,6 +83,9 @@ export default function CampaignTesterListPage() {
           <Link href="/campaign-tester/new" className="btn btn-primary">
             + New client campaign
           </Link>
+          <Link href="/campaign-tester/onboarding" className="btn">
+            New client (full guided)
+          </Link>
           <Link href="/campaign-tester/new?mode=add-campaign" className="btn">
             + Add campaign (same client)
           </Link>

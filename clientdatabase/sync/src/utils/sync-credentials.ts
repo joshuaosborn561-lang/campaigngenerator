@@ -1,6 +1,26 @@
 import type { DBClient } from "../types/index.js";
 
 /**
+ * When your SmartLead account is agency/white-label, list campaigns with `?client_id=` so
+ * the API returns that sub-workspace. Set in Railway: SMARTLEAD_CLIENT_ID or
+ * SMARTLEAD_DEFAULT_CLIENT_ID (numeric sub-account / client id from SmartLead).
+ */
+export function getSmartLeadCampaignListParams():
+  | { client_id?: string; include_tags?: string }
+  | undefined {
+  const id =
+    process.env.SMARTLEAD_CLIENT_ID?.trim() ||
+    process.env.SMARTLEAD_DEFAULT_CLIENT_ID?.trim();
+  if (id && /^\d+$/.test(id)) {
+    return { client_id: id, include_tags: "true" };
+  }
+  if (process.env.SMARTLEAD_INCLUDE_TAGS === "1" || process.env.SMARTLEAD_INCLUDE_TAGS === "true") {
+    return { include_tags: "true" };
+  }
+  return undefined;
+}
+
+/**
  * Optional SmartLead / HeyReach **account** API keys on the sync worker (Railway env).
  * When set, they override per-client keys from the database for that platform so one
  * workspace key pulls every campaign under that SmartLead/HeyReach account.
