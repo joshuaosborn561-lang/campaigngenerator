@@ -9,11 +9,12 @@
   --text-primary: #e8f3ee;
   --text-secondary: #a6c5b9;
   --text-muted: #6f9688;
-  --accent: #34d399;
-  --accent-hover: #3fe6a8;
-  --accent-light: rgba(52, 211, 153, 0.12);
-  --green: #34d399;
-  --green-bg: rgba(52, 211, 153, 0.1);
+  /* Forest green accent (readable on dark + light) */
+  --accent: #1d7a4a;
+  --accent-hover: #2a9d5f;
+  --accent-light: rgba(29, 122, 74, 0.18);
+  --green: #1d7a4a;
+  --green-bg: rgba(29, 122, 74, 0.14);
   --orange: #fb923c;
   --orange-bg: rgba(251, 146, 60, 0.1);
   --red: #f87171;
@@ -808,13 +809,14 @@ input[type="checkbox"] {
 }
 .app-layout--onboarding-light .onb-light-crumbs a,
 .app-layout--onboarding-light .onb-light-link {
-  color: #0d9488;
+  color: #166534;
   text-decoration: underline;
   text-underline-offset: 2px;
+  font-weight: 500;
 }
 .app-layout--onboarding-light .onb-light-crumbs a:hover,
 .app-layout--onboarding-light .onb-light-link:hover {
-  color: #0f766e;
+  color: #14532d;
 }
 .app-layout--onboarding-light .onb-light-muted {
   color: #64748b;
@@ -846,13 +848,14 @@ input[type="checkbox"] {
   color: #475569;
 }
 .app-layout--onboarding-light .ct-wizard-step-dot.current {
-  background: rgba(13, 148, 136, 0.12);
-  border-color: #0d9488;
-  color: #0f172a;
+  background: var(--green-bg);
+  border-color: var(--accent);
+  color: #14532d;
 }
 .app-layout--onboarding-light .ct-wizard-step-dot.done {
-  background: rgba(13, 148, 136, 0.15);
-  color: #0d9488;
+  background: rgba(29, 122, 74, 0.2);
+  color: #14532d;
+  border-color: #86b89a;
 }
 .app-layout--onboarding-light .ct-card {
   background: #f8fafc;
@@ -909,17 +912,43 @@ input[type="checkbox"] {
   border-color: #cbd5e1;
 }
 .app-layout--onboarding-light .btn {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
-  color: #0f172a;
+  background: #d8ece1;
+  border: 1px solid #6bae84;
+  color: #0f2e1a;
+  font-weight: 600;
+  box-shadow: 0 1px 0 rgba(15, 46, 26, 0.06);
 }
 .app-layout--onboarding-light .btn:hover {
+  background: #c5e3d0;
+  color: #0a1f12;
+  border-color: #1d7a4a;
+}
+.app-layout--onboarding-light .btn:disabled {
   background: #e2e8f0;
-  color: #0f172a;
-  border-color: #94a3b8;
+  border-color: #cbd5e1;
+  color: #64748b;
+  box-shadow: none;
 }
 .app-layout--onboarding-light .btn-primary {
+  background: #166534;
   color: #fff;
+  border-color: #14532d;
+  box-shadow: 0 2px 4px rgba(20, 83, 45, 0.25);
+}
+.app-layout--onboarding-light .btn-primary:hover {
+  background: #1d7a4a;
+  border-color: #166534;
+  color: #fff;
+}
+.app-layout--onboarding-light .btn-primary:disabled {
+  background: #9ca3af;
+  border-color: #9ca3af;
+  color: #f3f4f6;
+  box-shadow: none;
+}
+.app-layout--onboarding-light .btn:focus-visible {
+  outline: 2px solid #166534;
+  outline-offset: 2px;
 }
 .app-layout--onboarding-light .filter-input {
   background: #fff;
