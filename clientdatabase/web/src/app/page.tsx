@@ -176,9 +176,11 @@ export default function HomePage() {
               {" · "}
               <Link href="/chat">AI Analyst — ask</Link>
               {" · "}
-              <Link href="/campaign-tester">Campaign tester</Link>
+              <Link href="/campaign-tester">Campaign testing machine</Link>
               {" · "}
-              <Link href="/campaign-tester/strategy">Client onboarding</Link>
+              <Link href="/campaign-tester/onboarding">New client (guided)</Link>
+              {" · "}
+              <Link href="/campaign-tester/strategy">Client strategy</Link>
             </p>
           </div>
         </div>

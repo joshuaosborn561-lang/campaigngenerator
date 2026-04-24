@@ -26,6 +26,7 @@ export default function ClientsDirectoryPage() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -65,6 +66,31 @@ export default function ClientsDirectoryPage() {
     }
   }, [load, refreshing]);
 
+  async function deleteClient(clientId: string, name: string) {
+    if (deletingId) return;
+    if (
+      !window.confirm(
+        `Delete “${name}” and all related strategy, brief, and (with DB support) live campaign data? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeletingId(clientId);
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, { method: "DELETE" });
+      const d = await res.json();
+      if (!res.ok) {
+        alert(d.error || "Delete failed. Apply Supabase migration 020 if this fails on briefs.");
+        return;
+      }
+      await load();
+    } catch {
+      alert("Network error");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <div className="app-layout">
       <AppSidebar active="clients" />
@@ -85,8 +111,11 @@ export default function ClientsDirectoryPage() {
             <button className="btn" type="button" onClick={refresh} disabled={loading || refreshing}>
               {refreshing ? "Refreshing…" : "Refresh"}
             </button>
-            <Link href="/clients/new" className="btn btn-primary" style={{ textDecoration: "none" }}>
+            <Link href="/clients/new" className="btn" style={{ textDecoration: "none" }}>
               Add client
+            </Link>
+            <Link href="/campaign-tester/onboarding" className="btn btn-primary" style={{ textDecoration: "none" }}>
+              New client (guided)
             </Link>
           </div>
         </div>
@@ -149,6 +178,15 @@ export default function ClientsDirectoryPage() {
                     <Link href={`/campaign-tester/new?client_id=${encodeURIComponent(c.id)}`} className="sg-link">
                       New campaign
                     </Link>
+                    <button
+                      type="button"
+                      className="sg-link"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red, #f87171)" }}
+                      onClick={() => void deleteClient(c.id, c.name)}
+                      disabled={deletingId === c.id}
+                    >
+                      {deletingId === c.id ? "Deleting…" : "Delete"}
+                    </button>
                   </div>
                 </li>
               ))}

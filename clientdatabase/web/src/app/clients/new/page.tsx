@@ -60,6 +60,12 @@ export default function NewClientPage() {
           <div className="ct-sub">
             ICP, website, and list work do not need SmartLead or HeyReach. Add those keys when you
             are ready to sync live campaigns; they stay encrypted in Supabase.
+            {" "}
+            After saving, use{" "}
+            <Link href="/campaign-tester/onboarding" style={{ color: "var(--accent)" }}>
+              New client (guided)
+            </Link>{" "}
+            for the full website → ICP → list flow.
           </div>
         </div>
 

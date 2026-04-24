@@ -113,3 +113,17 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 }
+
+/**
+ * DELETE /api/clients/[id]
+ * Removes the client. Related campaigns, strategies, and (with DB FK) campaign_briefs cascade.
+ */
+export async function DELETE(_req: NextRequest, ctx: Ctx) {
+  const { id } = await ctx.params;
+
+  const { error: delErr } = await supabase.from("clients").delete().eq("id", id);
+  if (delErr) {
+    return NextResponse.json({ error: delErr.message }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, deleted: id });
+}

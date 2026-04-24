@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import AppSidebar from "@/components/AppSidebar";
 
 type ClientHub = {
@@ -15,10 +16,21 @@ type ClientHub = {
   has_heyreach_key: boolean;
 };
 
+type LiveCampaign = {
+  id: string;
+  name: string | null;
+  source_platform: string | null;
+  status: string | null;
+  send_volume: number | null;
+  reply_rate: number | null;
+};
+
 export default function ClientHubPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const [client, setClient] = useState<ClientHub | null>(null);
   const [stats, setStats] = useState<{ campaigns: number; briefs: number } | null>(null);
+  const [liveCampaigns, setLiveCampaigns] = useState<LiveCampaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,6 +41,8 @@ export default function ClientHubPage({ params }: { params: Promise<{ id: string
   const [editHeyreach, setEditHeyreach] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deletingCam, setDeletingCam] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +65,15 @@ export default function ClientHubPage({ params }: { params: Promise<{ id: string
           setEditSmartlead("");
           setEditHeyreach("");
         }
+        const cRes = await fetch(`/api/campaigns?client_id=${encodeURIComponent(id)}`);
+        const cJson = await cRes.json();
+        if (!cancelled) {
+          if (cRes.ok) {
+            setLiveCampaigns(cJson.campaigns ?? []);
+          } else {
+            setLiveCampaigns([]);
+          }
+        }
       } catch {
         if (!cancelled) setError("Network error");
       } finally {
@@ -61,6 +84,56 @@ export default function ClientHubPage({ params }: { params: Promise<{ id: string
       cancelled = true;
     };
   }, [id]);
+
+  async function removeClient() {
+    if (deleting || !client) return;
+    if (
+      !window.confirm(
+        `Delete “${client.name}”? This removes strategies, ICP, live synced campaigns, and (after DB migration) campaign briefs.`
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/clients/${id}`, { method: "DELETE" });
+      const d = await res.json();
+      if (!res.ok) {
+        alert(d.error || "Delete failed. Apply Supabase migration 020 if this fails on briefs.");
+        setDeleting(false);
+        return;
+      }
+      router.push("/clients");
+    } catch {
+      alert("Network error");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function removeLiveCampaign(camId: string) {
+    if (deletingCam) return;
+    if (!window.confirm("Remove this live campaign from the database? Lead rows in this app will be deleted with it.")) {
+      return;
+    }
+    setDeletingCam(camId);
+    try {
+      const res = await fetch(`/api/campaigns/${camId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json();
+        alert(d.error || "Delete failed");
+        return;
+      }
+      setLiveCampaigns((rows) => rows.filter((c) => c.id !== camId));
+      if (stats) {
+        setStats((s) => (s ? { ...s, campaigns: Math.max(0, s.campaigns - 1) } : s));
+      }
+    } catch {
+      alert("Network error");
+    } finally {
+      setDeletingCam(null);
+    }
+  }
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -144,6 +217,13 @@ export default function ClientHubPage({ params }: { params: Promise<{ id: string
               <Link href={`/chat?view=contacts&client_id=${encodeURIComponent(id)}`} className="btn btn-primary" style={{ textDecoration: "none" }}>
                 AI Analyst — search
               </Link>
+              <Link
+                href={`/campaign-tester/onboarding?client_id=${encodeURIComponent(id)}`}
+                className="btn"
+                style={{ textDecoration: "none" }}
+              >
+                Guided new client
+              </Link>
               <Link href={`/campaign-tester/strategy?client_id=${encodeURIComponent(id)}`} className="btn" style={{ textDecoration: "none" }}>
                 Client strategy
               </Link>
@@ -154,6 +234,38 @@ export default function ClientHubPage({ params }: { params: Promise<{ id: string
                 AI Analyst — ask
               </Link>
             </div>
+
+            {liveCampaigns.length > 0 && (
+              <div className="ct-card" style={{ marginBottom: 20 }}>
+                <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Live campaigns (synced to DB)</h2>
+                <p className="ct-wizard-help" style={{ marginBottom: 10, fontSize: 12 }}>
+                  This is the warehouse from SmartLead / HeyReach. Deleting only removes the copy in Supabase, not
+                  the campaign in the vendor app.
+                </p>
+                <ul className="ct-list" style={{ margin: 0 }}>
+                  {liveCampaigns.map((c) => (
+                    <li key={c.id} style={{ alignItems: "center" }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div className="ct-list-label">{c.name || "Unnamed"}</div>
+                        <div className="ct-list-sub">
+                          {c.source_platform || "—"} · {c.status || "—"} · sends {c.send_volume ?? "—"} · reply{" "}
+                          {c.reply_rate != null ? `${c.reply_rate.toFixed(1)}%` : "—"}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ fontSize: 11, color: "var(--red, #f87171)" }}
+                        onClick={() => void removeLiveCampaign(c.id)}
+                        disabled={deletingCam === c.id}
+                      >
+                        {deletingCam === c.id ? "…" : "Delete copy"}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="ct-alert ct-alert-info" style={{ marginBottom: 16 }}>
               Sync runs from Railway using keys on this client. After keys are set, deploy or trigger your{" "}
@@ -224,6 +336,24 @@ export default function ClientHubPage({ params }: { params: Promise<{ id: string
                 </button>
               </div>
             </form>
+            <div className="ct-card" style={{ borderColor: "var(--red, #f87171)" }}>
+              <h2 style={{ fontSize: 15, color: "var(--red, #f87171)" }}>Delete client</h2>
+              <p style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                Permanently remove this client from the app. Requires running migration{" "}
+                <code style={{ fontSize: 11 }}>020_campaign_briefs_client_cascade</code> on Supabase so
+                related briefs are removed. SmartLead and HeyReach campaigns in those tools are
+                not deleted — only the warehouse copy here.
+              </p>
+              <button
+                type="button"
+                className="btn"
+                style={{ borderColor: "var(--red, #f87171)", color: "var(--red, #f87171)" }}
+                onClick={removeClient}
+                disabled={deleting}
+              >
+                {deleting ? "Deleting…" : "Delete this client…"}
+              </button>
+            </div>
           </>
         )}
       </div>

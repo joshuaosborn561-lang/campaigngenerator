@@ -26,6 +26,7 @@ export default function CampaignTesterListPage() {
   const [briefs, setBriefs] = useState<BriefRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [clientFilter, setClientFilter] = useState<string>("");
 
   useEffect(() => {
@@ -54,6 +55,27 @@ export default function CampaignTesterListPage() {
     })();
   }, [clientFilter]);
 
+  async function deleteBrief(bid: string) {
+    if (deletingId) return;
+    if (!window.confirm("Delete this campaign brief and its test data? This cannot be undone.")) {
+      return;
+    }
+    setDeletingId(bid);
+    try {
+      const res = await fetch(`/api/campaign-tester/briefs/${encodeURIComponent(bid)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json();
+        alert(d.error || "Delete failed");
+        return;
+      }
+      setBriefs((rows) => rows.filter((b) => b.id !== bid));
+    } catch {
+      alert("Network error");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   // Group by client name so the list reads like a book of work per client.
   const grouped = useMemo(() => {
     const byClient = new Map<string, { name: string; clientId: string | null; rows: BriefRow[] }>();
@@ -80,10 +102,10 @@ export default function CampaignTesterListPage() {
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 20, flexWrap: "wrap" }}>
-          <Link href="/campaign-tester/new" className="btn btn-primary">
+          <Link href="/campaign-tester/new" className="btn btn-primary" style={{ textDecoration: "none" }}>
             + New client campaign
           </Link>
-          <Link href="/campaign-tester/onboarding" className="btn">
+          <Link href="/campaign-tester/onboarding" className="btn" style={{ textDecoration: "none" }}>
             New client (full guided)
           </Link>
           <Link href="/campaign-tester/new?mode=add-campaign" className="btn">
@@ -189,6 +211,15 @@ export default function CampaignTesterListPage() {
                       {b.status.replace("_", " ")}
                     </span>
                     <Link className="btn" href={`/campaign-tester/${b.id}`}>Open</Link>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => void deleteBrief(b.id)}
+                      disabled={deletingId === b.id}
+                      style={{ fontSize: 11, color: "var(--red, #f87171)" }}
+                    >
+                      {deletingId === b.id ? "…" : "Delete"}
+                    </button>
                   </li>
                 ))}
               </ul>
