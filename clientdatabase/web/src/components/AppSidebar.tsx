@@ -10,6 +10,17 @@ const ICON_ANALYST = (
   </svg>
 );
 
+const ICON_LISTS = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="8" y1="6" x2="21" y2="6" />
+    <line x1="8" y1="12" x2="21" y2="12" />
+    <line x1="8" y1="18" x2="21" y2="18" />
+    <line x1="3" y1="6" x2="3.01" y2="6" />
+    <line x1="3" y1="12" x2="3.01" y2="12" />
+    <line x1="3" y1="18" x2="3.01" y2="18" />
+  </svg>
+);
+
 const ICON_TESTER = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M10 2v7.31" />
@@ -40,6 +51,7 @@ export type SidebarActive =
   | "home"
   | "clients"
   | "chat"
+  | "lists"
   | "tester";
 
 export default function AppSidebar({ active }: { active: SidebarActive }) {
@@ -65,6 +77,13 @@ export default function AppSidebar({ active }: { active: SidebarActive }) {
         title="AI Analyst (Ask + search prospects)"
       >
         {ICON_ANALYST}
+      </Link>
+      <Link
+        href="/list-pipeline"
+        className={`sidebar-nav-item${active === "lists" ? " active" : ""}`}
+        title="List pipeline (Sales Nav + Outscraper → Clay)"
+      >
+        {ICON_LISTS}
       </Link>
       <Link
         href="/campaign-tester"

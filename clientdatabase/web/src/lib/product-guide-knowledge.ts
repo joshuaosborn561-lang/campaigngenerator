@@ -10,6 +10,7 @@ A central warehouse (Supabase) for SmartLead + HeyReach campaign data, with:
 - **Contacts**: deduplicated people with lead-database-style filters, CSV export.
 - **AI Analyst** (/chat): one place for **Ask** (Gemini on warehouse data) and **Search** (prospect table + filters + NL→filters from SmartLead/HeyReach). The /contacts and /intelligence routes redirect into /chat.
 - **Campaign tester**: wizard from brief → ICP → infrastructure → offers → six structured copy tests.
+- **List pipeline** (/list-pipeline): build Sales Navigator people search URLs from geography + company size + title; run Outscraper Google Maps and post rows to a Clay table webhook. Env: \`OUTSCRAPER_API_KEY\`, optional \`CLAY_LIST_WEBHOOK_URL\` / \`CLAY_LIST_WEBHOOK_TOKEN\`.
 - **Calendly webhooks** (/api/webhooks/calendly): verified meetings in \`calendly_events\`; use CALENDLY_ACCOUNT_MAP for agency vs client orgs.
 
 ## Clients (/clients, /clients/new)
