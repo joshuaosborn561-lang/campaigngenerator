@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import AppSidebar from "@/components/AppSidebar";
 import ListPipelinePanel, { type ListPipelineContext } from "@/components/list-pipeline-panel";
+import OnboardingClaudePanel from "@/components/onboarding-claude-panel";
 
 const DEFAULT_STRATEGY = "Main strategy";
 
@@ -231,21 +232,23 @@ function OnboardingContent() {
     })();
   }, [clientId, loadStrategy]);
 
-  useEffect(() => {
+  const refetchLanesAndOffers = useCallback(async () => {
     if (!strategy?.id) {
       setLanes([]);
       setOffers([]);
       return;
     }
-    (async () => {
-      const [lr, of] = await Promise.all([
-        fetch(`/api/campaign-tester/strategies/${encodeURIComponent(strategy.id)}/lanes`).then((r) => r.json()),
-        fetch(`/api/campaign-tester/strategies/${encodeURIComponent(strategy.id)}/offers`).then((r) => r.json()),
-      ]);
-      setLanes(lr.lanes ?? []);
-      setOffers(of.offers ?? []);
-    })();
+    const [lr, of] = await Promise.all([
+      fetch(`/api/campaign-tester/strategies/${encodeURIComponent(strategy.id)}/lanes`).then((r) => r.json()),
+      fetch(`/api/campaign-tester/strategies/${encodeURIComponent(strategy.id)}/offers`).then((r) => r.json()),
+    ]);
+    setLanes(lr.lanes ?? []);
+    setOffers(of.offers ?? []);
   }, [strategy?.id]);
+
+  useEffect(() => {
+    void refetchLanesAndOffers();
+  }, [refetchLanesAndOffers]);
 
   useEffect(() => {
     if (!strategy?.id || !laneId) {
@@ -571,15 +574,23 @@ function OnboardingContent() {
           </div>
         )}
 
-        {step === 3 && (
+        {step === 3 && strategy?.id && (
           <div className="ct-card">
-            <h2>3 — Who is the decision maker? (Claude in strategy flow)</h2>
+            <h2>3 — Who is the decision maker? (Claude)</h2>
             <p className="ct-wizard-help">
-              Draft who signs off, who blocks, and what title lines match your offer. (Automated
-              Claude pass on this page is a follow-up; for now, capture the hypothesis here.)
+              Use the chat to refine ICP in real time—who signs, who blocks, and which titles to
+              target. When you like Claude&apos;s take, copy it into the field below.
             </p>
-            <div className="ct-field">
-              <label>Hypothesis (titles, function, who cares)</label>
+            <OnboardingClaudePanel
+              strategyId={strategy.id}
+              mode="icp"
+              title="Chat: decision maker & buyer map"
+              help="Go back and forth with Claude. Ask for rewrites, narrower titles, or blockers. Then click “Use latest” to paste the reply into the hypothesis field."
+              applyLabel="Use latest Claude reply in hypothesis"
+              onApplyText={(t) => setOnb((o) => ({ ...o, decision_maker_hypothesis: t }))}
+            />
+            <div className="ct-field" style={{ marginTop: 16 }}>
+              <label>Hypothesis (edit after chat — or write freehand)</label>
               <textarea
                 className="ct-textarea"
                 rows={5}
@@ -606,12 +617,25 @@ function OnboardingContent() {
           </div>
         )}
 
-        {step === 4 && (
+        {step === 4 && strategy?.id && (
           <div className="ct-card">
-            <h2>4 — Firmographics & segments (ICP lanes)</h2>
-            <p className="ct-wizard-help">Align to company size, industry, and geo. We store each slice as a lane for lists.</p>
-            <div className="ct-field">
-              <label>Segment notes (firmographics, geo, size)</label>
+            <h2>4 — Firmographics & ICP segments (Claude + lanes)</h2>
+            <p className="ct-wizard-help">
+              Chat with Claude until you are happy with your segments, then <strong>Save segments to strategy</strong> to
+              create ICP lane rows. You can still add quick lanes from the website analysis below.
+            </p>
+            <OnboardingClaudePanel
+              strategyId={strategy.id}
+              mode="lanes"
+              title="Chat: firmographic segments"
+              help="Propose, merge, and cut segments. When the conversation matches what you want, save—lanes appear in the list and in step 6 for list building."
+              onFinalized={() => {
+                void refetchLanesAndOffers();
+              }}
+              finalizeLabel="Save segments to strategy (replaces previous lanes from wizard)"
+            />
+            <div className="ct-field" style={{ marginTop: 16 }}>
+              <label>Segment notes (optional scratchpad — also saved to wizard state)</label>
               <textarea
                 className="ct-textarea"
                 rows={4}
@@ -621,7 +645,7 @@ function OnboardingContent() {
             </div>
             {lanes.length === 0 && (
               <p className="ct-alert ct-alert-info" style={{ marginTop: 8 }}>
-                Add lanes from your website run (below) or in{" "}
+                No lanes in the strategy yet. Use the chat and save, or add from website, or in{" "}
                 <Link
                   className="onb-light-link"
                   href={clientId ? `/campaign-tester/strategy?client_id=${clientId}` : "/campaign-tester/strategy"}
@@ -664,21 +688,31 @@ function OnboardingContent() {
           </div>
         )}
 
-        {step === 5 && (
+        {step === 5 && strategy?.id && (
           <div className="ct-card">
-            <h2>5 — Offer + signals (enrichment in Clay next)</h2>
+            <h2>5 — Offer angles (15) + signals (Claude)</h2>
             <p className="ct-wizard-help">
-              15+ variant ideas are generated in Client strategy (Claude). Add technographic and
-              hiring signal notes for your Clay/Sculptor playbooks.
+              Work through <strong>15 offer angles</strong> with Claude—ask for rewrites, mergers, or sharper hooks.
+              When the set feels right, save to your strategy. Then add signal notes for Clay/Sculptor.
             </p>
-            <div className="ct-field">
-              <label>Offer angle notes</label>
+            <OnboardingClaudePanel
+              strategyId={strategy.id}
+              mode="offers"
+              title="Chat: 15 offer angles"
+              help="Say which angles to keep, drop, or merge. If you are happy with fewer, ask Claude to suggest more to reach 15, then save."
+              onFinalized={() => {
+                void refetchLanesAndOffers();
+              }}
+              finalizeLabel="Save 15 offer angles to strategy (replaces previous offers from wizard)"
+            />
+            <div className="ct-field" style={{ marginTop: 16 }}>
+              <label>Offer / angle notes (optional scratchpad)</label>
               <textarea
                 className="ct-textarea"
                 rows={3}
                 value={onb.offer_notes ?? ""}
                 onChange={(e) => setOnb((o) => ({ ...o, offer_notes: e.target.value }))}
-                placeholder="Hooks to test, risk-reversal, proof…"
+                placeholder="Hooks, risk-reversal, proof, constraints…"
               />
             </div>
             <div className="ct-field">
@@ -692,7 +726,7 @@ function OnboardingContent() {
             </div>
             {offers.length > 0 && (
               <p className="onb-light-body">
-                Offer library: {offers.length} in Main strategy. Generate more on{" "}
+                Offer library: {offers.length} in Main strategy. Deeper editing:{" "}
                 <Link
                   className="onb-light-link"
                   href={clientId ? `/campaign-tester/strategy?client_id=${clientId}` : "/campaign-tester/strategy"}

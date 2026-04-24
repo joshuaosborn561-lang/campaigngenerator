@@ -977,6 +977,91 @@ input[type="checkbox"] {
   border-left-color: #ef4444;
 }
 
+/* Interactive Claude (onboarding) */
+.app-layout--onboarding-light .onb-claude-panel {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #c5e3d0;
+  border-radius: var(--radius);
+  background: #f0f9f4;
+}
+.app-layout--onboarding-light .onb-claude-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f2e1a;
+  margin: 0 0 4px 0;
+}
+.app-layout--onboarding-light .onb-claude-start {
+  margin-top: 8px;
+}
+.app-layout--onboarding-light .onb-claude-thread {
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 4px;
+}
+.app-layout--onboarding-light .onb-claude-bubble {
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 100%;
+}
+.app-layout--onboarding-light .onb-claude-bubble--asst {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  align-self: flex-start;
+  color: #0f172a;
+}
+.app-layout--onboarding-light .onb-claude-bubble--user {
+  background: #d8ece1;
+  border: 1px solid #6bae84;
+  align-self: flex-end;
+  color: #0f2e1a;
+}
+.app-layout--onboarding-light .onb-claude-bubble-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #14532d;
+  margin-bottom: 4px;
+}
+.app-layout--onboarding-light .onb-claude-bubble--user .onb-claude-bubble-label {
+  color: #166534;
+}
+.app-layout--onboarding-light .onb-claude-bubble-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.app-layout--onboarding-light .onb-claude-typing {
+  color: #64748b;
+  font-style: italic;
+}
+.app-layout--onboarding-light .onb-claude-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.app-layout--onboarding-light .onb-claude-input {
+  min-height: 72px;
+}
+.app-layout--onboarding-light .onb-claude-actions,
+.app-layout--onboarding-light .onb-claude-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.app-layout--onboarding-light .onb-claude-foot {
+  border-top: 1px solid #c5e3d0;
+  padding-top: 10px;
+}
+
 .ct-alert {
   padding: 10px 14px;
   border-radius: var(--radius-sm);
