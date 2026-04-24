@@ -28,10 +28,10 @@ export default function OnboardingPage() {
   return (
     <Suspense
       fallback={
-        <div className="app-layout">
+        <div className="app-layout app-layout--onboarding-light">
           <AppSidebar active="tester" />
           <div className="ct-shell">
-            <p style={{ color: "var(--text-muted)" }}>Loading…</p>
+            <p className="onb-light-muted">Loading…</p>
           </div>
         </div>
       }
@@ -413,19 +413,24 @@ function OnboardingContent() {
   };
 
   return (
-    <div className="app-layout">
+    <div className="app-layout app-layout--onboarding-light">
       <AppSidebar active="tester" />
       <div className="ct-shell" style={{ maxWidth: 820 }}>
-        <div className="ct-crumbs">
-          <Link href="/campaign-tester">Campaign testing machine</Link> / New client (guided)
+        <div className="ct-crumbs onb-light-crumbs">
+          <Link className="onb-light-link" href="/campaign-tester">
+            Campaign testing machine
+          </Link>{" "}
+          / New client (guided)
         </div>
         <div className="ct-header">
-          <h1>New client — guided setup</h1>
-          <div className="ct-sub">
+          <h1 className="onb-light-h1">New client — guided setup</h1>
+          <div className="ct-sub onb-light-sub">
             No SmartLead or HeyReach keys required until you want sync. Website and ICP work use
             server-side keys (Gemini, Claude) only. After this you copy lists to Clay, enrich, then
             push to your sequencers.{" "}
-            <Link href="/campaign-tester/new?mode=add-campaign">Already onboarded? Add a campaign</Link>
+            <Link className="onb-light-link" href="/campaign-tester/new?mode=add-campaign">
+              Already onboarded? Add a campaign
+            </Link>
           </div>
         </div>
         {error && <div className="ct-alert ct-alert-block">{error}</div>}
@@ -438,7 +443,11 @@ function OnboardingContent() {
                 <span className={"ct-wizard-step-dot" + (n < step ? " done" : on ? " current" : "")}>
                   {n < step ? "✓" : n}
                 </span>
-                {on ? <span style={{ fontSize: 12, fontWeight: 600 }}>{label}</span> : null}
+                {on ? (
+                  <span className="onb-light-wizard-label" style={{ fontSize: 12, fontWeight: 600 }}>
+                    {label}
+                  </span>
+                ) : null}
               </div>
             );
           })}
@@ -522,10 +531,7 @@ function OnboardingContent() {
               />
             </div>
             {analysisSummary && (
-              <div
-                className="ct-card"
-                style={{ marginTop: 10, padding: 12, fontSize: 12, background: "var(--bg-tertiary)" }}
-              >
+              <div className="ct-card onb-light-nested-box" style={{ marginTop: 10, padding: 12, fontSize: 12 }}>
                 <strong>Last summary</strong>
                 <p style={{ margin: "6px 0 0" }}>{analysisSummary}</p>
               </div>
@@ -549,9 +555,15 @@ function OnboardingContent() {
                 Next — ICP
               </button>
             </div>
-            <p style={{ fontSize: 11, color: "var(--text-muted)" }}>
+            <p className="onb-light-fineprint">
               Claude (decision-maker hypothesis) in the next step. Full editing also lives in{" "}
-              <Link href={clientId ? `/campaign-tester/strategy?client_id=${clientId}` : "/campaign-tester/strategy"}>Client strategy</Link>.
+              <Link
+                className="onb-light-link"
+                href={clientId ? `/campaign-tester/strategy?client_id=${clientId}` : "/campaign-tester/strategy"}
+              >
+                Client strategy
+              </Link>
+              .
             </p>
             <div className="ct-wizard-nav">
               <button type="button" className="btn" onClick={() => setStep(1)}>Back</button>
@@ -610,7 +622,13 @@ function OnboardingContent() {
             {lanes.length === 0 && (
               <p className="ct-alert ct-alert-info" style={{ marginTop: 8 }}>
                 Add lanes from your website run (below) or in{" "}
-                <Link href={clientId ? `/campaign-tester/strategy?client_id=${clientId}` : "/campaign-tester/strategy"}>Client strategy</Link>.
+                <Link
+                  className="onb-light-link"
+                  href={clientId ? `/campaign-tester/strategy?client_id=${clientId}` : "/campaign-tester/strategy"}
+                >
+                  Client strategy
+                </Link>
+                .
               </p>
             )}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -673,9 +691,15 @@ function OnboardingContent() {
               />
             </div>
             {offers.length > 0 && (
-              <p style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+              <p className="onb-light-body">
                 Offer library: {offers.length} in Main strategy. Generate more on{" "}
-                <Link href={clientId ? `/campaign-tester/strategy?client_id=${clientId}` : "/campaign-tester/strategy"}>Client strategy</Link>.
+                <Link
+                  className="onb-light-link"
+                  href={clientId ? `/campaign-tester/strategy?client_id=${clientId}` : "/campaign-tester/strategy"}
+                >
+                  Client strategy
+                </Link>
+                .
               </p>
             )}
             <div className="ct-wizard-nav">
