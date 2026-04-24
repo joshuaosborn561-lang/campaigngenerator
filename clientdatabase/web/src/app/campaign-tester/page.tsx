@@ -79,9 +79,12 @@ export default function CampaignTesterListPage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 20, flexWrap: "wrap" }}>
           <Link href="/campaign-tester/new" className="btn btn-primary">
-            + New Campaign Brief
+            + New client campaign
+          </Link>
+          <Link href="/campaign-tester/new?mode=add-campaign" className="btn">
+            + Add campaign (same client)
           </Link>
           <Link href="/campaign-tester/strategy" className="btn">
             Client Strategy
@@ -141,7 +144,7 @@ export default function CampaignTesterListPage() {
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <Link
                       className="btn"
-                      href={`/campaign-tester/new?client_id=${encodeURIComponent(group.clientId)}`}
+                      href={`/campaign-tester/new?mode=add-campaign&client_id=${encodeURIComponent(group.clientId)}`}
                       style={{ fontSize: 12, padding: "6px 12px" }}
                     >
                       + New brief

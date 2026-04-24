@@ -58,8 +58,8 @@ export default function NewClientPage() {
         <div className="ct-header">
           <h1>Add client</h1>
           <div className="ct-sub">
-            After saving, the nightly Railway sync can pick up this row and ingest campaigns. Keys stay in Supabase —
-            you can add them later from the client hub.
+            ICP, website, and list work do not need SmartLead or HeyReach. Add those keys when you
+            are ready to sync live campaigns; they stay encrypted in Supabase.
           </div>
         </div>
 

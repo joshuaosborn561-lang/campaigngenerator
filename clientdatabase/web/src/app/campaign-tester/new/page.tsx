@@ -9,12 +9,23 @@ import ListPipelinePanel, { type ListPipelineContext } from "@/components/list-p
 const WIZARD = [
   { n: 1, label: "Client" },
   { n: 2, label: "Name" },
-  { n: 3, label: "Strategy" },
+  { n: 3, label: "Playbook" },
   { n: 4, label: "ICP lane" },
   { n: 5, label: "Offer" },
   { n: 6, label: "Idea" },
-  { n: 7, label: "List / launch" },
+  { n: 7, label: "Lists + Clay" },
 ] as const;
+
+const DEFAULT_STRATEGY_NAME = "Main strategy";
+
+type WizardMode = "onboard" | "add-campaign";
+
+type PastBrief = {
+  id: string;
+  name: string;
+  status: string;
+  created_at: string;
+};
 
 interface ClientRow {
   id: string;
@@ -53,10 +64,15 @@ function NewCampaignBriefContent() {
   const searchParams = useSearchParams();
   const clientIdFromUrl = searchParams.get("client_id") ?? "";
   const strategyIdFromUrl = searchParams.get("strategy_id") ?? "";
+  const modeParam = searchParams.get("mode");
+  const mode: WizardMode = modeParam === "add-campaign" ? "add-campaign" : "onboard";
 
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [strategyBootstrapping, setStrategyBootstrapping] = useState(false);
+  const [pastBriefs, setPastBriefs] = useState<PastBrief[]>([]);
+  const [loadingPastBriefs, setLoadingPastBriefs] = useState(false);
 
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [clientId, setClientId] = useState<string>("");
@@ -71,9 +87,7 @@ function NewCampaignBriefContent() {
   const [ideas, setIdeas] = useState<IdeaRow[]>([]);
   const [ideaId, setIdeaId] = useState<string>("");
 
-  // Inline "create" panels (one step at a time)
-  const [newStrategyName, setNewStrategyName] = useState("");
-  const [creatingStrategy, setCreatingStrategy] = useState(false);
+  // Inline "create" (lanes & offers only — strategy is auto-created as "Main strategy" when missing)
   const [newLaneName, setNewLaneName] = useState("");
   const [newLaneDesc, setNewLaneDesc] = useState("");
   const [creatingLane, setCreatingLane] = useState(false);
@@ -98,11 +112,35 @@ function NewCampaignBriefContent() {
     })();
   }, []);
 
-  // Load strategies when client changes; do not auto-pick (wizard controls selection)
+  // When adding another campaign, show prior briefs for context (no LLM "what worked" yet — that is a future pass)
+  useEffect(() => {
+    if (mode !== "add-campaign" || !clientId) {
+      setPastBriefs([]);
+      return;
+    }
+    (async () => {
+      setLoadingPastBriefs(true);
+      try {
+        const res = await fetch(
+          `/api/campaign-tester/briefs?client_id=${encodeURIComponent(clientId)}`
+        );
+        const data = await res.json();
+        const rows: PastBrief[] = (data.briefs ?? []).map((b: PastBrief) => b);
+        setPastBriefs(rows);
+      } catch {
+        setPastBriefs([]);
+      } finally {
+        setLoadingPastBriefs(false);
+      }
+    })();
+  }, [mode, clientId]);
+
+  // Load strategies; auto-create "Main strategy" if none (user never has to "create a strategy" manually)
   useEffect(() => {
     if (!clientId) {
       setStrategies([]);
       setStrategyId("");
+      setStrategyBootstrapping(false);
       setLanes([]);
       setLaneId("");
       setOffers([]);
@@ -112,19 +150,43 @@ function NewCampaignBriefContent() {
       return;
     }
     (async () => {
+      setStrategyBootstrapping(true);
+      setError(null);
       try {
         const res = await fetch(`/api/campaign-tester/strategies?client_id=${encodeURIComponent(clientId)}`);
         const data = await res.json();
-        const list: StrategyRow[] = data.strategies ?? [];
+        let list: StrategyRow[] = data.strategies ?? [];
+
+        if (list.length === 0) {
+          const ins = await fetch("/api/campaign-tester/strategies", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ client_id: clientId, name: DEFAULT_STRATEGY_NAME }),
+          });
+          const insJ = await ins.json();
+          if (ins.ok && insJ.strategy) {
+            list = [insJ.strategy as StrategyRow];
+          } else if (!ins.ok) {
+            setError(
+              (insJ && insJ.error) || "Could not start a client playbook. Try Client Strategy in the nav."
+            );
+            list = [];
+          }
+        }
+
         setStrategies(list);
         if (strategyIdFromUrl && list.some((s) => s.id === strategyIdFromUrl)) {
           setStrategyId(strategyIdFromUrl);
+        } else if (list.length === 1) {
+          setStrategyId(list[0].id);
         } else {
           setStrategyId((prev) => (list.some((s) => s.id === prev) ? prev : ""));
         }
       } catch {
         setStrategies([]);
         setStrategyId("");
+      } finally {
+        setStrategyBootstrapping(false);
       }
     })();
   }, [clientId, strategyIdFromUrl]);
@@ -192,13 +254,13 @@ function NewCampaignBriefContent() {
     return {
       1: Boolean(clientId),
       2: name.trim().length > 0,
-      3: Boolean(strategyId),
+      3: Boolean(strategyId) && !strategyBootstrapping,
       4: Boolean(laneId),
       5: Boolean(offerId),
       6: true,
       7: Boolean(clientId) && name.trim() && strategyId && laneId && offerId,
     } as const;
-  }, [clientId, name, strategyId, laneId, offerId]);
+  }, [clientId, name, strategyId, strategyBootstrapping, laneId, offerId]);
 
   const goNext = useCallback(() => {
     setError(null);
@@ -208,28 +270,6 @@ function NewCampaignBriefContent() {
   const goBack = useCallback(() => {
     if (step > 1) setStep((s) => Math.max(1, s - 1));
   }, [step]);
-
-  async function createStrategyInline() {
-    if (!clientId || !newStrategyName.trim()) return;
-    setCreatingStrategy(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/campaign-tester/strategies", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client_id: clientId, name: newStrategyName.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not create strategy");
-      setStrategies((prev) => [data.strategy, ...prev]);
-      setStrategyId(data.strategy.id);
-      setNewStrategyName("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Create failed");
-    } finally {
-      setCreatingStrategy(false);
-    }
-  }
 
   async function createLaneInline() {
     if (!strategyId || !newLaneName.trim()) return;
@@ -360,10 +400,26 @@ function NewCampaignBriefContent() {
           <Link href="/campaign-tester">Campaign Testing Machine</Link> / New campaign
         </div>
         <div className="ct-header">
-          <h1>Start a new campaign</h1>
+          <h1>{mode === "add-campaign" ? "Add another campaign" : "Onboard: new client campaign"}</h1>
           <div className="ct-sub">
-            We&apos;ll go step by step. You don&apos;t need the answers upfront — each step explains
-            the term and lets you add something if it is missing.
+            {mode === "add-campaign" ? (
+              <>
+                Same flow as a first client, plus past briefs for this client. Offer / segment
+                intelligence (what&apos;s working in reply data) is coming next; for now use your
+                notes and the list below.
+                {" "}
+                <Link href="/campaign-tester/new" style={{ color: "var(--accent)" }}>New client</Link>{" "}
+                (first-time) <Link href="/clients/new">or add a client</Link>
+              </>
+            ) : (
+              <>
+                The full vision: website → ICP (Gemini/Claude) → segments → offer variants → pick
+                sends → this tool outputs lists + Clay. Today this wizard picks client, playbook,
+                lane, offer, then list URLs / Outscraper; deep steps stay on{" "}
+                <Link href="/campaign-tester/strategy">Client strategy</Link> until we wire the
+                guided pipeline. No outreach API keys required until sync.
+              </>
+            )}
           </div>
         </div>
 
@@ -421,9 +477,39 @@ function NewCampaignBriefContent() {
                 ))}
               </select>
               <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-                New company? <Link href="/clients/new">Add a client</Link> first, then return here.
+                New company? <Link href="/clients/new">Add a client</Link> (SmartLead / HeyReach keys
+                are optional) — we&apos;ll use website + ICP from strategy before any sync keys.
               </p>
             </div>
+            {mode === "add-campaign" && clientId && (
+              <div
+                className="ct-card"
+                style={{ background: "var(--bg-tertiary)", marginTop: 14, padding: 12, border: "1px solid var(--border)" }}
+              >
+                <h3 style={{ fontSize: 12, fontWeight: 600, margin: "0 0 8px" }}>Previous campaigns (this client)</h3>
+                {loadingPastBriefs ? (
+                  <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading…</p>
+                ) : pastBriefs.length === 0 ? (
+                  <p style={{ fontSize: 12, color: "var(--text-muted)" }}>No briefs yet for this client.</p>
+                ) : (
+                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: "var(--text-secondary)" }}>
+                    {pastBriefs.slice(0, 8).map((b) => (
+                      <li key={b.id} style={{ marginBottom: 4 }}>
+                        <Link href={`/campaign-tester/${b.id}`}>{b.name}</Link>{" "}
+                        <span style={{ color: "var(--text-muted)" }}>
+                          — {b.status} · {new Date(b.created_at).toLocaleDateString()}
+                        </span>
+                      </li>
+                    ))}
+                    {pastBriefs.length > 8 ? <li>…and {pastBriefs.length - 8} more</li> : null}
+                  </ul>
+                )}
+                <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8, marginBottom: 0 }}>
+                  We will surface which offers/angles are over- or under-indexing on replies once
+                  that pipeline is connected; for now, use this list to avoid duplicate angles.
+                </p>
+              </div>
+            )}
             <div className="ct-wizard-nav">
               <span />
               <div className="ct-wizard-nav-spread">
@@ -433,7 +519,7 @@ function NewCampaignBriefContent() {
                   disabled={!canGo[1]}
                   onClick={goNext}
                 >
-                  Next — name this campaign
+                  {mode === "add-campaign" ? "Next — name this run" : "Next — name this campaign"}
                 </button>
               </div>
             </div>
@@ -442,7 +528,7 @@ function NewCampaignBriefContent() {
 
         {step === 2 && (
           <div className="ct-card">
-            <h2>Step 2 — What should we call this campaign?</h2>
+            <h2>Step 2 — What should we call this {mode === "add-campaign" ? "send" : "campaign"}?</h2>
             <p className="ct-wizard-help" style={{ marginTop: 8 }}>
               A short working title for this send (you can change it later). It helps you find this
               work in the list and in Clay or SmartLead notes.
@@ -467,7 +553,7 @@ function NewCampaignBriefContent() {
                   disabled={!canGo[2]}
                   onClick={goNext}
                 >
-                  Next — pick strategy
+                  Next — client playbook
                 </button>
               </div>
             </div>
@@ -476,25 +562,33 @@ function NewCampaignBriefContent() {
 
         {step === 3 && (
           <div className="ct-card">
-            <h2>Step 3 — What is a &ldquo;strategy&rdquo; here?</h2>
-            <dl className="ct-wizard-dl">
-              <dt>Strategy (client play)</dt>
-              <dd>
-                One &ldquo;playbook&rdquo; for this client: their positioning, your core proof, the
-                offers you can run. A client can have several strategies (e.g. new logo vs
-                upsell) — for most teams, one is enough to start.
-              </dd>
-            </dl>
-            {activeStrategy && (
-              <p style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                Selected: <strong style={{ color: "var(--text-primary)" }}>{activeStrategy.name}</strong>
-                {activeStrategy.what_they_do
-                  ? ` — ${activeStrategy.what_they_do.slice(0, 120)}${activeStrategy.what_they_do.length > 120 ? "…" : ""}`
-                  : ""}
+            <h2>Step 3 — Client playbook</h2>
+            <p className="ct-wizard-help" style={{ marginTop: 4 }}>
+              We keep ICP, offers, and website analysis on one playbook per client (auto-named{" "}
+              <strong>Main strategy</strong> on first use). You don’t create or name it here — go
+              to{" "}
+              <Link href={clientId ? `/campaign-tester/strategy?client_id=${encodeURIComponent(clientId)}` : "/campaign-tester/strategy"}>Client strategy</Link> for website → Gemini pass, ICP
+              chat, segments, and offer ideation. Multiple playbooks (e.g. upsell vs new logo) are
+              rare: use the switch below if you have more than one.
+            </p>
+            {strategyBootstrapping && clientId && (
+              <p className="ct-alert ct-alert-info" style={{ marginTop: 6 }}>
+                Preparing playbook…
               </p>
             )}
+            {activeStrategy && !strategyBootstrapping && (
+              <p style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                <strong>Active:</strong> {activeStrategy.name}
+                {activeStrategy.what_they_do
+                  ? ` — ${activeStrategy.what_they_do.slice(0, 160)}${
+                      activeStrategy.what_they_do.length > 160 ? "…" : ""
+                    }`
+                  : " — add positioning and site analysis in Client strategy."}
+              </p>
+            )}
+            {strategies.length > 1 ? (
             <div className="ct-field" style={{ maxWidth: 480 }}>
-              <label>Choose a strategy *</label>
+              <label>Switch playbook (if you have more than one)</label>
               <select
                 className="ct-select"
                 value={strategyId}
@@ -503,9 +597,8 @@ function NewCampaignBriefContent() {
                   setLaneId("");
                   setOfferId("");
                 }}
-                disabled={!clientId}
+                disabled={!clientId || strategyBootstrapping}
               >
-                <option value="">Select one…</option>
                 {strategies.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -513,43 +606,27 @@ function NewCampaignBriefContent() {
                 ))}
               </select>
             </div>
-            {clientId && !strategies.length && (
-              <p className="ct-alert ct-alert-info" style={{ marginTop: 8 }}>
-                You don&apos;t have a strategy yet. Add a name below — you can add website analysis
-                and offers on the <Link href={`/campaign-tester/strategy?client_id=${encodeURIComponent(clientId)}`}>Client Strategy</Link> page anytime.
-              </p>
-            )}
-            <details className="ct-inline-form">
-              <summary>Create a new strategy</summary>
-              <div className="ct-inline-form-body">
-                <div className="ct-field">
-                  <label>Strategy name *</label>
-                  <input
-                    className="ct-input"
-                    value={newStrategyName}
-                    onChange={(e) => setNewStrategyName(e.target.value)}
-                    placeholder="e.g. Core outbound 2026"
-                    maxLength={200}
-                  />
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={!newStrategyName.trim() || creatingStrategy}
-                  onClick={createStrategyInline}
-                >
-                  {creatingStrategy ? "Saving…" : "Create and select"}
-                </button>
-              </div>
-            </details>
-            <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 10 }}>
-              Full website + lane builder: <Link href={`/campaign-tester/strategy?client_id=${encodeURIComponent(clientId || "")}`}>Client Strategy</Link> (open in a new tab if you prefer the big canvas).
+            ) : null}
+            <p className="ct-card-sub" style={{ marginTop: 12, marginBottom: 0, fontSize: 12, color: "var(--text-muted)" }}>
+              This campaign wizard is the short path to a brief + list URLs. The full
+              <strong> first-client </strong> pipeline (site → ICP → segments → 15+ offer angles →
+              per-segment sends → list tech) is implemented on Client strategy; we’ll merge the
+              guided steps into one flow in a follow-up.
             </p>
             <div className="ct-wizard-nav">
               <button type="button" className="btn" onClick={goBack}>
                 Back
               </button>
               <div className="ct-wizard-nav-spread">
+                <Link
+                  href={clientId ? `/campaign-tester/strategy?client_id=${encodeURIComponent(clientId)}` : "/campaign-tester/strategy"}
+                  className="btn"
+                  style={{ textDecoration: "none" }}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open Client strategy
+                </Link>
                 <button
                   type="button"
                   className="btn btn-primary"
@@ -794,12 +871,50 @@ function NewCampaignBriefContent() {
         {step === 7 && (
           <>
             <div className="ct-card">
-              <h2>Step 7 — List building and launch</h2>
+              <h2>Step 7 — Lists, Clay, then you push to sequencers</h2>
               <p className="ct-wizard-help" style={{ marginTop: 6 }}>
-                Build Sales Nav URLs (paste into Clay) or run a small Outscraper pull below. When you
-                are ready, create the campaign brief to open the full copy/testing wizard (Module
-                1).
+                Stops at list generation: use Sales Nav URLs in Clay, Outscraper rows to your
+                table webhook, then you route in Clay/Sculptor to SmartLead/HeyReach (this app
+                does not call sequencers). Save the campaign brief when you are ready to open
+                the copy / testing track.
               </p>
+              <details
+                className="ct-card"
+                style={{ marginBottom: 14, padding: 12, background: "var(--bg-tertiary)", border: "1px solid var(--border)" }}
+              >
+                <summary style={{ fontWeight: 600, fontSize: 12, cursor: "pointer" }}>
+                  What to tell Clay / Sculptor in each table
+                </summary>
+                <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 10, lineHeight: 1.5 }}>
+                  Use one inbound table (or a pair: people vs places) and branch from there. Each row
+                  that came from this app or your webhook can carry:{" "}
+                  <code>_source</code> (outscraper), <code>_ingested_at</code>, and context fields
+                  <code> _client</code>, <code>_campaign_draft</code>, <code>_lane</code>, <code> _offer</code>, etc.
+                  (when you run Outscraper from this wizard). The orchestration pattern we recommend:
+                </p>
+                <ol style={{ fontSize: 12, color: "var(--text-secondary)", margin: "8px 0 0 18px", lineHeight: 1.6 }}>
+                  <li>
+                    <strong>Raw / inbound table</strong> — Sales Nav (via browser extension or
+                    people scraper) or Outscraper JSON; do not add sequence logic here, only
+                    source + segment tags.
+                  </li>
+                  <li>
+                    <strong>Enrichment + filters</strong> — firmographics, title match to ICP, tech
+                    and hiring signals; mark pass/fail to segment.
+                  </li>
+                  <li>
+                    <strong>Sculptor (or automations)</strong> — for each <em>passing</em> segment,
+                    assign campaign id / angle id from your runbook, then hand off email + LinkedIn
+                    exports to the right SmartLead or HeyReach campaign. Keep one Clay table = one
+                    logical list source; split by state or by query so each batch is under 2,500
+                    (Sales Nav) or your Outscraper cap.
+                  </li>
+                </ol>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "8px 0 0" }}>
+                  Your operators name exact Clay columns; we will add field mapping templates when
+                  you share one workspace export.
+                </p>
+              </details>
               <div
                 style={{
                   display: "flex",
@@ -854,11 +969,11 @@ function NewCampaignBriefContent() {
                 disabled={!canGo[7] || submitting}
                 onClick={handleCreateBrief}
               >
-                {submitting ? "Creating…" : "Create campaign brief & continue →"}
+                {submitting ? "Creating…" : "Create campaign brief & open Module 1 →"}
               </button>
             </div>
             <p style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "right", marginTop: 8 }}>
-              <Link href="/list-pipeline">Open full list pipeline</Link> in a separate view
+              <Link href="/list-pipeline">Open full list pipeline</Link> (same tools)
             </p>
           </>
         )}
