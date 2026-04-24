@@ -42,13 +42,20 @@ export default function OnboardingPage() {
 }
 
 const STEPS = [
-  "Client",
+  "Name + website",
   "Website (Gemini)",
   "ICP: who decides",
   "Segments (firmographics)",
   "Offer + signals",
   "Launch + Clay lists",
 ] as const;
+
+function normalizeWebsiteUrl(input: string): string {
+  const t = input.trim();
+  if (!t) return "";
+  if (/^https?:\/\//i.test(t)) return t;
+  return `https://${t.replace(/^\/+/, "")}`;
+}
 
 function OnboardingContent() {
   const router = useRouter();
@@ -65,6 +72,10 @@ function OnboardingContent() {
   const [analysisSummary, setAnalysisSummary] = useState<string | null>(null);
 
   const [onb, setOnb] = useState<Onboarding>({});
+
+  const [newClientName, setNewClientName] = useState("");
+  const [newClientUrl, setNewClientUrl] = useState("");
+  const [creatingClient, setCreatingClient] = useState(false);
 
   const [lanes, setLanes] = useState<{ id: string; name: string; description: string | null }[]>([]);
   const [offers, setOffers] = useState<{ id: string; name: string; one_liner: string; cta: string }[]>([]);
@@ -83,58 +94,134 @@ function OnboardingContent() {
   }, []);
 
   useEffect(() => {
-    if (preClient) setClientId(preClient);
+    if (preClient) {
+      setClientId(preClient);
+    }
   }, [preClient]);
 
-  const loadStrategy = useCallback(async (cid: string) => {
-    if (!cid) {
-      setStrategy(null);
-      setOnb({});
-      return;
+  useEffect(() => {
+    if (preClient) {
+      setStep(2);
     }
-    const res = await fetch(`/api/campaign-tester/strategies?client_id=${encodeURIComponent(cid)}`);
-    const data = await res.json();
-    let list: Strategy[] = data.strategies ?? [];
-    if (list.length === 0) {
-      const ins = await fetch("/api/campaign-tester/strategies", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client_id: cid, name: DEFAULT_STRATEGY }),
-      });
-      const insJ = await ins.json();
-      if (ins.ok && insJ.strategy) {
-        list = [insJ.strategy as Strategy];
-      } else {
-        setError((insJ && insJ.error) || "Could not create Main strategy");
+  }, [preClient]);
+
+  const loadStrategy = useCallback(
+    async (cid: string, options?: { seedWebsiteUrl?: string; advanceToStep?: number }) => {
+      if (!cid) {
+        setStrategy(null);
+        setOnb({});
         return;
       }
-    }
-    const s = list[0]!;
-    setStrategy(s);
-    const cons = s.constraints as Record<string, unknown> | undefined;
-    const wiz = cons && typeof cons.salesglider_wizard === "object" ? (cons.salesglider_wizard as Record<string, unknown>) : null;
-    const ob = wiz?.data;
-    if (ob && typeof ob === "object") {
-      setOnb({ ...((ob as Onboarding) || {}) } as Onboarding);
-    } else {
-      setOnb({});
-    }
-    const st = typeof wiz?.step === "number" ? wiz.step : null;
-    if (typeof st === "number" && st >= 1 && st <= STEPS.length) {
-      setStep(st);
-    }
-    try {
-      const ar = await fetch(`/api/campaign-tester/strategies/${encodeURIComponent(s.id)}/website-analyze`);
-      const aj = await ar.json();
-      if (aj.analysis?.summary) {
-        setAnalysisSummary(String(aj.analysis.summary));
+      const res = await fetch(`/api/campaign-tester/strategies?client_id=${encodeURIComponent(cid)}`);
+      const data = await res.json();
+      let list: Strategy[] = data.strategies ?? [];
+      if (list.length === 0) {
+        const ins = await fetch("/api/campaign-tester/strategies", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ client_id: cid, name: DEFAULT_STRATEGY }),
+        });
+        const insJ = await ins.json();
+        if (ins.ok && insJ.strategy) {
+          list = [insJ.strategy as Strategy];
+        } else {
+          setError((insJ && insJ.error) || "Could not create Main strategy");
+          return;
+        }
+      }
+      const s = list[0]!;
+      setStrategy(s);
+      const cons = s.constraints as Record<string, unknown> | undefined;
+      const wiz = cons && typeof cons.salesglider_wizard === "object" ? (cons.salesglider_wizard as Record<string, unknown>) : null;
+      const fromDb = (wiz?.data && typeof wiz.data === "object" ? wiz.data : {}) as Onboarding;
+      if (options?.seedWebsiteUrl) {
+        const merged: Onboarding = { ...fromDb, website_url: options.seedWebsiteUrl };
+        setOnb(merged);
+        await fetch(`/api/campaign-tester/strategies/${encodeURIComponent(s.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            onboarding: merged,
+            onboarding_step: options.advanceToStep ?? 2,
+            onboarding_complete: false,
+          }),
+        });
+        if (options.advanceToStep) setStep(options.advanceToStep);
+        const sRes = await fetch(`/api/campaign-tester/strategies/${encodeURIComponent(s.id)}`);
+        const sJson = await sRes.json();
+        if (sRes.ok && sJson.strategy) setStrategy(sJson.strategy as Strategy);
       } else {
+        if (Object.keys(fromDb).length) {
+          setOnb(fromDb);
+        } else {
+          setOnb({});
+        }
+        const wstep = typeof wiz?.step === "number" ? wiz.step : null;
+        if (typeof wstep === "number" && wstep >= 1 && wstep <= STEPS.length) {
+          // Legacy: step 1 was "pick client". If we have a site URL, resume at website analysis.
+          let resume = wstep === 1 && fromDb.website_url?.trim() ? 2 : wstep;
+          // Deep link ?client_id=... should land on website analysis, not the "new client" form.
+          if (preClient && cid === preClient && wstep === 1) {
+            resume = 2;
+          }
+          setStep(resume);
+        }
+        if (options?.advanceToStep) setStep(options.advanceToStep);
+      }
+      try {
+        const ar = await fetch(`/api/campaign-tester/strategies/${encodeURIComponent(s.id)}/website-analyze`);
+        const aj = await ar.json();
+        if (aj.analysis?.summary) {
+          setAnalysisSummary(String(aj.analysis.summary));
+        } else {
+          setAnalysisSummary(null);
+        }
+      } catch {
         setAnalysisSummary(null);
       }
-    } catch {
-      setAnalysisSummary(null);
+    },
+    [setError, preClient]
+  );
+
+  async function continueFromNewClientStep() {
+    const name = newClientName.trim();
+    const url = normalizeWebsiteUrl(newClientUrl);
+    if (!name) {
+      setError("Add the company or client name.");
+      return;
     }
-  }, []);
+    if (!url) {
+      setError("Add the client’s website (we’ll use it in the next step for analysis).");
+      return;
+    }
+    setCreatingClient(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, notes: `Onboarding — website: ${url}` }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setError(d.error ?? "Could not create client. Try a different name if this one exists.");
+        return;
+      }
+      const row = d.client as { id: string; name: string; industry_vertical: string | null };
+      setClientId(row.id);
+      setClients((prev) => {
+        if (prev.some((c) => c.id === row.id)) {
+          return prev.map((c) => (c.id === row.id ? { ...c, name: row.name, industry_vertical: row.industry_vertical } : c));
+        }
+        return [row, ...prev];
+      });
+      await loadStrategy(row.id, { seedWebsiteUrl: url, advanceToStep: 2 });
+    } catch {
+      setError("Network error creating client.");
+    } finally {
+      setCreatingClient(false);
+    }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -359,26 +446,60 @@ function OnboardingContent() {
 
         {step === 1 && (
           <div className="ct-card">
-            <h2>1 — Client</h2>
-            <p className="ct-wizard-help">Who is this for?</p>
+            <h2>1 — New client: name + website</h2>
+            <p className="ct-wizard-help">Start here to onboard. No SmartLead, HeyReach, or Clay API keys in this step.</p>
             <div className="ct-field" style={{ maxWidth: 400 }}>
-              <label>Client *</label>
-              <select className="ct-select" value={clientId} onChange={(e) => setClientId(e.target.value)}>
-                <option value="">Select…</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <label>Client name *</label>
+              <input
+                className="ct-input"
+                value={newClientName}
+                onChange={(e) => setNewClientName(e.target.value)}
+                placeholder="e.g. Acme Corp"
+                autoFocus
+              />
             </div>
-            <p style={{ fontSize: 12 }}>
-              <Link href="/clients/new">+ Create client (no API keys required)</Link>
-            </p>
+            <div className="ct-field" style={{ maxWidth: 400 }}>
+              <label>Client website (public) *</label>
+              <input
+                className="ct-input"
+                value={newClientUrl}
+                onChange={(e) => setNewClientUrl(e.target.value)}
+                placeholder="e.g. acmecorp.com or https://…"
+              />
+            </div>
+            {clients.length > 0 && (
+              <div className="ct-field" style={{ maxWidth: 400, marginTop: 8 }}>
+                <label>Or continue with an existing client</label>
+                <select
+                  className="ct-select"
+                  value={clientId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setClientId(id);
+                    if (id) setStep(2);
+                  }}
+                >
+                  <option value="">Select…</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="ct-wizard-help" style={{ marginTop: 6 }}>
+                  Picks a client you already have and goes to website analysis. Use the fields above for a new client.
+                </p>
+              </div>
+            )}
             <div className="ct-wizard-nav" style={{ marginTop: 16 }}>
               <span />
-              <button type="button" className="btn btn-primary" disabled={!clientId} onClick={() => setStep(2)}>
-                Next
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={continueFromNewClientStep}
+                disabled={!newClientName.trim() || !newClientUrl.trim() || creatingClient}
+              >
+                {creatingClient ? "Creating client…" : "Next — analyze website"}
               </button>
             </div>
           </div>
