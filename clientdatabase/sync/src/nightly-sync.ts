@@ -293,27 +293,31 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
 
           while (hasMore && !reachedOldData) {
                     const convResponse = await heyreach.getConversations(hrCampaign.id, offset, pageLimit);
-                    const conversations = convResponse?.items ?? convResponse ?? [];
+                    const conversations = convResponse?.items ?? [];
                     if (!Array.isArray(conversations) || conversations.length === 0) break;
 
-                for (const conv of conversations) {
+                for (const conv of conversations as unknown[]) {
+                            const c = conv as Record<string, unknown>;
                             // Filter by date — only process conversations with recent activity
-                      const lastActivityTime = conv.lastActivityAt ?? conv.updatedAt ?? conv.createdAt;
+                      const lastActivityTime = c.lastActivityAt ?? c.updatedAt ?? c.createdAt;
                             if (lastActivityTime) {
-                                          const activityDate = new Date(lastActivityTime);
+                                          const activityDate = new Date(
+                                            lastActivityTime as string | number | Date
+                                          );
                                           if (activityDate < SINCE_DATE) {
                                                           reachedOldData = true;
                                                           break;
                                           }
                             }
 
-                      const lead = conv.lead ?? conv;
-                            const linkedInUrl = lead.linkedInUrl ?? lead.profileUrl ?? "";
-                            const email = lead.email ?? "";
-                            const firstName = lead.firstName ?? "";
-                            const lastName = lead.lastName ?? "";
-                            const companyName = lead.companyName ?? "";
-                            const title = lead.title ?? "";
+                      const lead = c.lead ?? c;
+                            const L = lead as Record<string, unknown>;
+                            const linkedInUrl = (L.linkedInUrl ?? L.profileUrl ?? "") as string;
+                            const email = (L.email ?? "") as string;
+                            const firstName = (L.firstName ?? "") as string;
+                            const lastName = (L.lastName ?? "") as string;
+                            const companyName = (L.companyName ?? "") as string;
+                            const title = (L.title ?? "") as string;
 
                       if (!email && !linkedInUrl) continue;
 
@@ -332,13 +336,14 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
                       await store.linkContactToCampaign(dbContact.id, dbCampaign.id, undefined, "active");
 
                       // Count engagement from conversation messages
-                      const messages = conv.messages ?? [];
+                      const messages = (c.messages as unknown[] | undefined) ?? [];
                             let sentCount = 0;
                             let replyCount = 0;
                             for (const msg of messages) {
-                                          if (msg.direction === "outbound" || msg.type === "sent") {
+                                          const m = msg as Record<string, unknown>;
+                                          if (m.direction === "outbound" || m.type === "sent") {
                                                           sentCount++;
-                                          } else if (msg.direction === "inbound" || msg.type === "reply") {
+                                          } else if (m.direction === "inbound" || m.type === "reply") {
                                                           replyCount++;
                                           }
                             }

@@ -284,17 +284,19 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
 
           while (hasMore) {
                     const convResponse = await heyreach.getConversations(hrCampaign.id, offset, pageLimit);
-                    const conversations = convResponse?.items ?? convResponse ?? [];
+                    const conversations = convResponse?.items ?? [];
                     if (!Array.isArray(conversations) || conversations.length === 0) break;
 
-                for (const conv of conversations) {
-                            const lead = conv.lead ?? conv;
-                            const linkedInUrl = lead.linkedInUrl ?? lead.profileUrl ?? "";
-                            const email = lead.email ?? "";
-                            const firstName = lead.firstName ?? "";
-                            const lastName = lead.lastName ?? "";
-                            const companyName = lead.companyName ?? "";
-                            const title = lead.title ?? "";
+                for (const conv of conversations as unknown[]) {
+                            const c = conv as Record<string, unknown>;
+                            const lead = c.lead ?? c;
+                            const L = lead as Record<string, unknown>;
+                            const linkedInUrl = (L.linkedInUrl ?? L.profileUrl ?? "") as string;
+                            const email = (L.email ?? "") as string;
+                            const firstName = (L.firstName ?? "") as string;
+                            const lastName = (L.lastName ?? "") as string;
+                            const companyName = (L.companyName ?? "") as string;
+                            const title = (L.title ?? "") as string;
 
                       // We need at least an email or LinkedIn URL to create a contact
                       if (!email && !linkedInUrl) continue;
@@ -315,13 +317,14 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
                       await store.linkContactToCampaign(dbContact.id, dbCampaign.id, undefined, "active");
 
                       // Count engagement from conversation messages
-                      const messages = conv.messages ?? [];
+                      const messages = (c.messages as unknown[] | undefined) ?? [];
                             let sentCount = 0;
                             let replyCount = 0;
                             for (const msg of messages) {
-                                          if (msg.direction === "outbound" || msg.type === "sent") {
+                                          const m = msg as Record<string, unknown>;
+                                          if (m.direction === "outbound" || m.type === "sent") {
                                                           sentCount++;
-                                          } else if (msg.direction === "inbound" || msg.type === "reply") {
+                                          } else if (m.direction === "inbound" || m.type === "reply") {
                                                           replyCount++;
                                           }
                             }
@@ -456,8 +459,27 @@ async function main() {
 
   console.log(`Found ${clients.length} client(s) to sync.\n`);
 
-  for (const client of clients) {
-        await syncClient(client);
+  if (process.env.HEYREACH_ONLY === "1") {
+    for (const client of clients) {
+      if (client.heyreach_api_key) {
+        console.log(`\n--- HeyReach-only: ${client.name} ---`);
+        try {
+          const r = await syncHeyReachForClient(client, store);
+          console.log(
+            `  ✓ HeyReach: ${r.campaignsSynced} campaigns, ${r.leadsSynced} contact rows`
+          );
+        } catch (e) {
+          console.error(
+            "  HeyReach error:",
+            e instanceof Error ? e.message : e
+          );
+        }
+      }
+    }
+  } else {
+    for (const client of clients) {
+      await syncClient(client);
+    }
   }
 
   console.log("\n✓ Historical load complete.");
