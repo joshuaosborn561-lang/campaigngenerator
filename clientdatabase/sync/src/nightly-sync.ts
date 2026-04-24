@@ -147,6 +147,8 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
       try {
               const leads = await smartlead.getAllCampaignLeads(slCampaign.id);
               for (const slLead of leads) {
+                        const email = typeof slLead.email === "string" ? slLead.email.trim() : "";
+                        if (!email) continue;
                         const sentiment = mapCategoryToSentiment(slLead.category);
                         const engagement = computeLeadEngagementFlags({
                           category: slLead.category,
@@ -164,8 +166,8 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
                         });
                         await store.upsertLead({
                                     campaign_id: dbCampaign.id,
-                                    smartlead_lead_id: slLead.id,
-                                    email: slLead.email,
+                                    smartlead_lead_id: Number(slLead.id),
+                                    email,
                                     first_name: slLead.first_name,
                                     last_name: slLead.last_name,
                                     company: slLead.company_name,
@@ -184,8 +186,11 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
                         });
                         leadsSynced++;
               }
-      } catch {
-              // Lead fetch may fail for some campaigns
+      } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn(
+                `  [${client.name}][SmartLead] could not process leads for ${slCampaign.name}: ${msg}`
+              );
       }
 
       campaignsSynced++;

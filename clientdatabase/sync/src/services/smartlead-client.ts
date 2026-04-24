@@ -114,16 +114,58 @@ export class SmartLeadClient {
 
   // ---- Leads ----
 
+  /**
+   * SmartLead may return a bare array, `{ data: [...] }` pagination, or (current API)
+   * an array of wrappers `{ lead: { id, email, ... }, status, lead_category_id, ... }`.
+   */
+  private normalizeLeadsList(rawItems: unknown[]): SmartLeadLead[] {
+    return rawItems
+      .map((item): SmartLeadLead | null => {
+        if (item == null) return null;
+        if (typeof item !== "object") return null;
+        const o = item as Record<string, unknown>;
+        if (o.lead && typeof o.lead === "object") {
+          const L = o.lead as Record<string, unknown>;
+          const idVal = L.id;
+          const id = typeof idVal === "number" ? idVal : Number(idVal);
+          if (!Number.isFinite(id)) return null;
+          return {
+            id,
+            email: String(L.email ?? ""),
+            first_name: L.first_name != null ? String(L.first_name) : undefined,
+            last_name: L.last_name != null ? String(L.last_name) : undefined,
+            company_name: L.company_name != null ? String(L.company_name) : undefined,
+            designation: L.title != null ? String(L.title) : undefined,
+            company_size: L.company_size != null ? String(L.company_size) : undefined,
+            industry: L.industry != null ? String(L.industry) : undefined,
+            location: L.location != null ? String(L.location) : undefined,
+            lead_status: o.status != null ? String(o.status) : undefined,
+            category: typeof o.lead_category_id === "string" ? o.lead_category_id : undefined,
+          };
+        }
+        // Already flat
+        return item as SmartLeadLead;
+      })
+      .filter((x): x is SmartLeadLead => x != null);
+  }
+
   async getCampaignLeads(
     campaignId: number,
     offset = 0,
     limit = 100
   ): Promise<SmartLeadLead[]> {
-    return this.request<SmartLeadLead[]>(
+    const raw = await this.request<SmartLeadLead[] | { data?: unknown[] } | unknown[]>(
       "get",
       `/campaigns/${campaignId}/leads`,
       { offset, limit }
     );
+    if (Array.isArray(raw)) {
+      return this.normalizeLeadsList(raw);
+    }
+    if (raw && typeof raw === "object" && Array.isArray((raw as { data?: unknown[] }).data)) {
+      return this.normalizeLeadsList((raw as { data: unknown[] }).data);
+    }
+    return [];
   }
 
   async getAllCampaignLeads(campaignId: number): Promise<SmartLeadLead[]> {
