@@ -18,6 +18,11 @@ import { InferenceService, enrichLeadFields } from "./services/inference.js";
 import { runInferenceForClient } from "./services/inference-runner.js";
 import { parseLocation } from "./utils/title-parser.js";
 import { computeLeadEngagementFlags } from "./utils/lead-engagement.js";
+import {
+  hasAnyOutreachKey,
+  resolveHeyReachApiKey,
+  resolveSmartLeadApiKey,
+} from "./utils/sync-credentials.js";
 import pLimit from "p-limit";
 import type { DBClient } from "./types/index.js";
 
@@ -36,7 +41,9 @@ const SINCE_DATE = new Date(Date.now() - 48 * 60 * 60 * 1000);
 // ---- SmartLead nightly sync (extracted) ----
 
 async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
-    const smartlead = new SmartLeadClient(client.smartlead_api_key!);
+    const slKey = resolveSmartLeadApiKey(client);
+    if (!slKey) return { campaignsSynced: 0, leadsSynced: 0 };
+    const smartlead = new SmartLeadClient(slKey);
 
   let campaignsSynced = 0;
     let leadsSynced = 0;
@@ -202,7 +209,9 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
 // ---- HeyReach nightly sync ----
 
 async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
-    const heyreach = new HeyReachClient(client.heyreach_api_key!);
+    const hrKey = resolveHeyReachApiKey(client);
+    if (!hrKey) return { campaignsSynced: 0, leadsSynced: 0 };
+    const heyreach = new HeyReachClient(hrKey);
 
   // Validate API key first
   const keyValid = await heyreach.checkApiKey();
@@ -421,7 +430,7 @@ async function syncClient(client: DBClient): Promise<ClientSyncResult> {
         console.log(`\n--- Nightly sync: ${client.name} ---`);
 
       // SmartLead sync
-      if (client.smartlead_api_key) {
+      if (resolveSmartLeadApiKey(client)) {
               try {
                         const result = await syncSmartLeadForClient(client, store);
                         totalCampaigns += result.campaignsSynced;
@@ -432,7 +441,7 @@ async function syncClient(client: DBClient): Promise<ClientSyncResult> {
       }
 
       // HeyReach sync
-      if (client.heyreach_api_key) {
+      if (resolveHeyReachApiKey(client)) {
               try {
                         const result = await syncHeyReachForClient(client, store);
                         totalCampaigns += result.campaignsSynced;
@@ -442,7 +451,7 @@ async function syncClient(client: DBClient): Promise<ClientSyncResult> {
               }
       }
 
-      if (!client.smartlead_api_key && !client.heyreach_api_key) {
+      if (!hasAnyOutreachKey(client)) {
               console.warn(`  Skipping ${client.name}: no API keys configured`);
       }
 

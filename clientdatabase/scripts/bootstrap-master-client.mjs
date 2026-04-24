@@ -1,6 +1,6 @@
 /**
  * One-off: ensure a "master" client row exists and set SmartLead + HeyReach keys via set_client_api_keys.
- * Expects: SUPABASE_URL, SUPABASE_SERVICE_KEY, SMARTLEAD_API_KEY, HEYREACH_API_KEY
+ * Expects: SUPABASE_URL, SUPABASE_SERVICE_KEY, SMARTLEAD_API_KEY (or SMARTLEAD_ACCOUNT_API_KEY), HEYREACH_API_KEY (or HEYREACH_ACCOUNT_API_KEY)
  *
  * Run: railway run -s agency-intel-web -- node clientdatabase/scripts/bootstrap-master-client.mjs
  */
@@ -9,8 +9,12 @@ import { createClient } from "../web/node_modules/@supabase/supabase-js/dist/ind
 
 const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_KEY;
-const sl = process.env.SMARTLEAD_API_KEY?.trim();
-const hr = process.env.HEYREACH_API_KEY?.trim();
+const sl =
+  process.env.SMARTLEAD_ACCOUNT_API_KEY?.trim() ||
+  process.env.SMARTLEAD_API_KEY?.trim();
+const hr =
+  process.env.HEYREACH_ACCOUNT_API_KEY?.trim() ||
+  process.env.HEYREACH_API_KEY?.trim();
 const name = process.env.MASTER_CLIENT_NAME?.trim() || "SalesGlider Master";
 
 if (!url || !key) {
@@ -18,7 +22,9 @@ if (!url || !key) {
   process.exit(1);
 }
 if (!sl && !hr) {
-  console.error("Set at least one of SMARTLEAD_API_KEY, HEYREACH_API_KEY");
+  console.error(
+    "Set at least one of SMARTLEAD_ACCOUNT_API_KEY / SMARTLEAD_API_KEY, HEYREACH_ACCOUNT_API_KEY / HEYREACH_API_KEY"
+  );
   process.exit(1);
 }
 

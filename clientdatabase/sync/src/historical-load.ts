@@ -18,6 +18,11 @@ import { InferenceService, enrichLeadFields } from "./services/inference.js";
 import { runInferenceForClient } from "./services/inference-runner.js";
 import { parseLocation } from "./utils/title-parser.js";
 import { computeLeadEngagementFlags } from "./utils/lead-engagement.js";
+import {
+  hasAnyOutreachKey,
+  resolveHeyReachApiKey,
+  resolveSmartLeadApiKey,
+} from "./utils/sync-credentials.js";
 import pLimit from "p-limit";
 import type { DBClient } from "./types/index.js";
 
@@ -38,7 +43,9 @@ const limit = pLimit(2); // concurrency limit for classification calls
 // ---- SmartLead sync (extracted from original syncClient) ----
 
 async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
-    const smartlead = new SmartLeadClient(client.smartlead_api_key!);
+    const slKey = resolveSmartLeadApiKey(client);
+    if (!slKey) return { campaignsSynced: 0, leadsSynced: 0 };
+    const smartlead = new SmartLeadClient(slKey);
 
   let campaignsSynced = 0;
     let leadsSynced = 0;
@@ -195,7 +202,9 @@ async function syncSmartLeadForClient(client: DBClient, store: SupabaseStore) {
 // ---- HeyReach sync ----
 
 async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
-    const heyreach = new HeyReachClient(client.heyreach_api_key!);
+    const hrKey = resolveHeyReachApiKey(client);
+    if (!hrKey) return { campaignsSynced: 0, leadsSynced: 0 };
+    const heyreach = new HeyReachClient(hrKey);
 
   // Validate API key first
   const keyValid = await heyreach.checkApiKey();
@@ -403,7 +412,7 @@ async function syncClient(client: DBClient) {
         console.log(`\n=== Syncing client: ${client.name} ===`);
 
       // SmartLead sync
-      if (client.smartlead_api_key) {
+      if (resolveSmartLeadApiKey(client)) {
               try {
                         const result = await syncSmartLeadForClient(client, store);
                         totalCampaigns += result.campaignsSynced;
@@ -414,7 +423,7 @@ async function syncClient(client: DBClient) {
       }
 
       // HeyReach sync
-      if (client.heyreach_api_key) {
+      if (resolveHeyReachApiKey(client)) {
               try {
                         const result = await syncHeyReachForClient(client, store);
                         totalCampaigns += result.campaignsSynced;
@@ -424,7 +433,7 @@ async function syncClient(client: DBClient) {
               }
       }
 
-      if (!client.smartlead_api_key && !client.heyreach_api_key) {
+      if (!hasAnyOutreachKey(client)) {
               console.warn(`  Skipping ${client.name}: no API keys configured`);
       }
 
@@ -499,7 +508,7 @@ async function main() {
 
   if (process.env.HEYREACH_ONLY === "1") {
     for (const client of clients) {
-      if (client.heyreach_api_key) {
+      if (resolveHeyReachApiKey(client)) {
         console.log(`\n--- HeyReach-only: ${client.name} ---`);
         try {
           const r = await syncHeyReachForClient(client, store);
