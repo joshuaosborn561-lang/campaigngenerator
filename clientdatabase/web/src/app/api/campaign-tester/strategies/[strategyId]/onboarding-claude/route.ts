@@ -22,7 +22,7 @@ const OFFER_JSON = `Return ONLY a JSON object (no markdown) with key "offers" â€
 - rationale (string) â€” why this angle for this ICP (can be short)`;
 
 function systemForMode(mode: Exclude<Mode, "finalize_lanes" | "finalize_offers">, clientName: string): string {
-  const base = `You are helping onboard a B2B client "${clientName}" for cold outbound. Be concise, practical, and collaborative. Ask clarifying questions when needed. This is a real back-and-forth: refine based on the user's latest message.`;
+  const base = `You are the built-in B2B outbound strategist in the SalesGlider client onboarding flow (not a separate app). You are trained on the same playbooks the rest of this product uses, plus the client's site/context below. Be concise, practical, and collaborative. Ask clarifying questions when needed. This is a real back-and-forth: refine based on the user's latest message.`;
   if (mode === "icp") {
     return `${base}
 

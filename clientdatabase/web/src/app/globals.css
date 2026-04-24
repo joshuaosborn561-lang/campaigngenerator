@@ -978,21 +978,8 @@ input[type="checkbox"] {
 }
 
 /* Interactive Claude (onboarding) */
-.app-layout--onboarding-light .onb-claude-panel {
-  margin-top: 12px;
-  padding: 14px;
-  border: 1px solid #c5e3d0;
-  border-radius: var(--radius);
-  background: #f0f9f4;
-}
-.app-layout--onboarding-light .onb-claude-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f2e1a;
-  margin: 0 0 4px 0;
-}
-.app-layout--onboarding-light .onb-claude-start {
-  margin-top: 8px;
+.app-layout--onboarding-light .onb-claude-inline {
+  margin: 0;
 }
 .app-layout--onboarding-light .onb-claude-thread {
   max-height: 360px;

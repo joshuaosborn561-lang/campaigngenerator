@@ -1,11 +1,11 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import AppSidebar from "@/components/AppSidebar";
 import ListPipelinePanel, { type ListPipelineContext } from "@/components/list-pipeline-panel";
-import OnboardingClaudePanel from "@/components/onboarding-claude-panel";
+import OnboardingClaudePanel, { type OnboardingClaudeHandle } from "@/components/onboarding-claude-panel";
 
 const DEFAULT_STRATEGY = "Main strategy";
 
@@ -85,6 +85,13 @@ function OnboardingContent() {
   const [offerId, setOfferId] = useState("");
   const [ideaId, setIdeaId] = useState("");
   const [campaignName, setCampaignName] = useState("");
+
+  const [laneStepFinishing, setLaneStepFinishing] = useState(false);
+  const [offerStepFinishing, setOfferStepFinishing] = useState(false);
+
+  const icpClaudeRef = useRef<OnboardingClaudeHandle | null>(null);
+  const lanesClaudeRef = useRef<OnboardingClaudeHandle | null>(null);
+  const offersClaudeRef = useRef<OnboardingClaudeHandle | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -559,7 +566,7 @@ function OnboardingContent() {
               </button>
             </div>
             <p className="onb-light-fineprint">
-              Claude (decision-maker hypothesis) in the next step. Full editing also lives in{" "}
+              Next step: decision-maker in the same wizard, with a built-in assistant. Advanced edits:{" "}
               <Link
                 className="onb-light-link"
                 href={clientId ? `/campaign-tester/strategy?client_id=${clientId}` : "/campaign-tester/strategy"}
@@ -576,21 +583,21 @@ function OnboardingContent() {
 
         {step === 3 && strategy?.id && (
           <div className="ct-card">
-            <h2>3 — Who is the decision maker? (Claude)</h2>
+            <h2>3 — Who is the decision maker?</h2>
             <p className="ct-wizard-help">
-              Use the chat to refine ICP in real time—who signs, who blocks, and which titles to
-              target. When you like Claude&apos;s take, copy it into the field below.
+              The assistant below is part of this step (same flow as the rest of the wizard)—it already knows
+              this client&apos;s site and context. Go back and forth; your hypothesis below updates from the
+              latest reply. Edit the text if you need a final touch, then continue.
             </p>
             <OnboardingClaudePanel
+              ref={icpClaudeRef}
+              key={`icp-${strategy.id}`}
               strategyId={strategy.id}
               mode="icp"
-              title="Chat: decision maker & buyer map"
-              help="Go back and forth with Claude. Ask for rewrites, narrower titles, or blockers. Then click “Use latest” to paste the reply into the hypothesis field."
-              applyLabel="Use latest Claude reply in hypothesis"
-              onApplyText={(t) => setOnb((o) => ({ ...o, decision_maker_hypothesis: t }))}
+              onLatestAssistant={(t) => setOnb((o) => ({ ...o, decision_maker_hypothesis: t }))}
             />
             <div className="ct-field" style={{ marginTop: 16 }}>
-              <label>Hypothesis (edit after chat — or write freehand)</label>
+              <label>Hypothesis (kept in sync with the assistant; edit as needed)</label>
               <textarea
                 className="ct-textarea"
                 rows={5}
@@ -619,20 +626,20 @@ function OnboardingContent() {
 
         {step === 4 && strategy?.id && (
           <div className="ct-card">
-            <h2>4 — Firmographics & ICP segments (Claude + lanes)</h2>
+            <h2>4 — Firmographics & ICP segments</h2>
             <p className="ct-wizard-help">
-              Chat with Claude until you are happy with your segments, then <strong>Save segments to strategy</strong> to
-              create ICP lane rows. You can still add quick lanes from the website analysis below.
+              Stay in this step: refine firmographic segments with the assistant, then continue—the next step saves
+              your notes and the conversation (as lane rows) into this strategy. You can also add quick lanes from the
+              website run first.
             </p>
             <OnboardingClaudePanel
+              ref={lanesClaudeRef}
+              key={`lanes-${strategy.id}`}
               strategyId={strategy.id}
               mode="lanes"
-              title="Chat: firmographic segments"
-              help="Propose, merge, and cut segments. When the conversation matches what you want, save—lanes appear in the list and in step 6 for list building."
               onFinalized={() => {
                 void refetchLanesAndOffers();
               }}
-              finalizeLabel="Save segments to strategy (replaces previous lanes from wizard)"
             />
             <div className="ct-field" style={{ marginTop: 16 }}>
               <label>Segment notes (optional scratchpad — also saved to wizard state)</label>
@@ -676,34 +683,45 @@ function OnboardingContent() {
                 type="button"
                 className="btn btn-primary"
                 onClick={async () => {
-                  await persistOnboarding(
-                    { firmographics_notes: onb.firmographics_notes },
-                    5
-                  );
-                  setStep(5);
+                  setLaneStepFinishing(true);
+                  try {
+                    if (lanesClaudeRef.current?.canFinalize) {
+                      const ok = await lanesClaudeRef.current.finalize();
+                      if (!ok) return;
+                      await refetchLanesAndOffers();
+                    }
+                    await persistOnboarding(
+                      { firmographics_notes: onb.firmographics_notes },
+                      5
+                    );
+                    setStep(5);
+                  } finally {
+                    setLaneStepFinishing(false);
+                  }
                 }}
-                disabled={saving}
-              >Next</button>
+                disabled={saving || laneStepFinishing}
+              >
+                {laneStepFinishing ? "Saving…" : "Save segments from chat &amp; continue"}
+              </button>
             </div>
           </div>
         )}
 
         {step === 5 && strategy?.id && (
           <div className="ct-card">
-            <h2>5 — Offer angles (15) + signals (Claude)</h2>
+            <h2>5 — Offer angles (15) + signals</h2>
             <p className="ct-wizard-help">
-              Work through <strong>15 offer angles</strong> with Claude—ask for rewrites, mergers, or sharper hooks.
-              When the set feels right, save to your strategy. Then add signal notes for Clay/Sculptor.
+              Same step as the rest of the wizard: refine up to 15 offer angles in the thread, add signal notes for
+              Clay, then continue—saves the offers from the chat into this strategy and moves to list setup.
             </p>
             <OnboardingClaudePanel
+              ref={offersClaudeRef}
+              key={`offers-${strategy.id}`}
               strategyId={strategy.id}
               mode="offers"
-              title="Chat: 15 offer angles"
-              help="Say which angles to keep, drop, or merge. If you are happy with fewer, ask Claude to suggest more to reach 15, then save."
               onFinalized={() => {
                 void refetchLanesAndOffers();
               }}
-              finalizeLabel="Save 15 offer angles to strategy (replaces previous offers from wizard)"
             />
             <div className="ct-field" style={{ marginTop: 16 }}>
               <label>Offer / angle notes (optional scratchpad)</label>
@@ -742,14 +760,26 @@ function OnboardingContent() {
                 type="button"
                 className="btn btn-primary"
                 onClick={async () => {
-                  await persistOnboarding(
-                    { offer_notes: onb.offer_notes, technographics_signals: onb.technographics_signals },
-                    6
-                  );
-                  setStep(6);
+                  setOfferStepFinishing(true);
+                  try {
+                    if (offersClaudeRef.current?.canFinalize) {
+                      const ok = await offersClaudeRef.current.finalize();
+                      if (!ok) return;
+                      await refetchLanesAndOffers();
+                    }
+                    await persistOnboarding(
+                      { offer_notes: onb.offer_notes, technographics_signals: onb.technographics_signals },
+                      6
+                    );
+                    setStep(6);
+                  } finally {
+                    setOfferStepFinishing(false);
+                  }
                 }}
-                disabled={saving}
-              >Next — launch</button>
+                disabled={saving || offerStepFinishing}
+              >
+                {offerStepFinishing ? "Saving…" : "Save offer angles from chat &amp; continue"}
+              </button>
             </div>
           </div>
         )}
