@@ -289,14 +289,22 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
 
                 for (const conv of conversations as unknown[]) {
                             const c = conv as Record<string, unknown>;
-                            const lead = c.lead ?? c;
-                            const L = lead as Record<string, unknown>;
-                            const linkedInUrl = (L.linkedInUrl ?? L.profileUrl ?? "") as string;
-                            const email = (L.email ?? "") as string;
+                            const prof = c.correspondentProfile;
+                            const L = (
+                              prof && typeof prof === "object"
+                                ? (prof as Record<string, unknown>)
+                                : (c.lead as Record<string, unknown> | undefined) ?? c
+                            ) as Record<string, unknown>;
+                            const linkedInUrl = (L.profileUrl ?? L.linkedInUrl ?? "") as string;
+                            const email = (
+                              (L.emailAddress ??
+                                L.enrichedEmailAddress ??
+                                L.customEmailAddress ??
+                                L.email) as string) || "";
                             const firstName = (L.firstName ?? "") as string;
                             const lastName = (L.lastName ?? "") as string;
                             const companyName = (L.companyName ?? "") as string;
-                            const title = (L.title ?? "") as string;
+                            const title = (L.position ?? L.headline ?? "") as string;
 
                       // We need at least an email or LinkedIn URL to create a contact
                       if (!email && !linkedInUrl) continue;
@@ -322,9 +330,19 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
                             let replyCount = 0;
                             for (const msg of messages) {
                                           const m = msg as Record<string, unknown>;
-                                          if (m.direction === "outbound" || m.type === "sent") {
+                                          if (m.sender === "ME") {
                                                           sentCount++;
-                                          } else if (m.direction === "inbound" || m.type === "reply") {
+                                          } else if (m.sender != null) {
+                                                          replyCount++;
+                                          } else if (
+                                            m.direction === "outbound" ||
+                                            m.type === "sent"
+                                          ) {
+                                                          sentCount++;
+                                          } else if (
+                                            m.direction === "inbound" ||
+                                            m.type === "reply"
+                                          ) {
                                                           replyCount++;
                                           }
                             }
