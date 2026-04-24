@@ -95,7 +95,12 @@ export function flattenOutscraperPlaces(data: unknown): Record<string, unknown>[
 export async function postPlacesToClayWebhook(
   webhookUrl: string,
   places: Record<string, unknown>[],
-  options?: { authToken?: string; idempotencyKeyPrefix?: string }
+  options?: {
+    authToken?: string;
+    idempotencyKeyPrefix?: string;
+    /** Merged into every row (e.g. campaign + client for Clay routing). */
+    campaignContext?: Record<string, string | null | undefined>;
+  }
 ): Promise<{ ok: number; failed: number }> {
   if (!webhookUrl?.trim()) {
     throw new Error("webhookUrl is required");
@@ -103,8 +108,16 @@ export async function postPlacesToClayWebhook(
   let ok = 0;
   let failed = 0;
   for (let i = 0; i < places.length; i++) {
+    const extra = options?.campaignContext
+      ? Object.fromEntries(
+          Object.entries(options.campaignContext).filter(
+            (e): e is [string, string] => e[1] != null && e[1] !== ""
+          )
+        )
+      : {};
     const payload = {
       ...places[i],
+      ...extra,
       _source: "outscraper_google_maps",
       _ingested_at: new Date().toISOString(),
       _row_index: i,

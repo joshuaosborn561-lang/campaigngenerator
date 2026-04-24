@@ -19,6 +19,17 @@ type Body = {
   clayAuthToken?: string;
   /** If true, use server env CLAY_LIST_WEBHOOK_URL when clayWebhookUrl omitted. */
   useDefaultClayWebhook?: boolean;
+  /** Merged into every Clay row for routing (e.g. campaign creation context). */
+  context?: {
+    campaignName?: string;
+    clientName?: string;
+    clientId?: string;
+    strategyId?: string;
+    strategyName?: string;
+    laneName?: string;
+    offerName?: string;
+    ideaName?: string;
+  };
 };
 
 /**
@@ -84,9 +95,24 @@ export async function POST(req: NextRequest) {
     let clay: { ok: number; failed: number } | undefined;
     if (targetWebhook && places.length) {
       const token = body.clayAuthToken || process.env.CLAY_LIST_WEBHOOK_TOKEN;
+      const ctx = body.context;
+      const campaignContext: Record<string, string | null | undefined> | undefined = ctx
+        ? {
+            _flow: "campaign",
+            _campaign_draft: ctx.campaignName,
+            _client: ctx.clientName,
+            _client_id: ctx.clientId,
+            _strategy_id: ctx.strategyId,
+            _strategy: ctx.strategyName,
+            _lane: ctx.laneName,
+            _offer: ctx.offerName,
+            _idea: ctx.ideaName,
+          }
+        : undefined;
       clay = await postPlacesToClayWebhook(targetWebhook, places, {
         authToken: token,
         idempotencyKeyPrefix: `om-${o.id || Date.now()}`,
+        campaignContext,
       });
     }
 
