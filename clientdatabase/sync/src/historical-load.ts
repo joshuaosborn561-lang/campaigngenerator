@@ -282,10 +282,24 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
               const pageLimit = 50;
               let hasMore = true;
 
+          const MAX_CONV_PAGES = 200;
+          let pageNum = 0;
           while (hasMore) {
-                    const convResponse = await heyreach.getConversations(hrCampaign.id, offset, pageLimit);
+                    if (pageNum >= MAX_CONV_PAGES) {
+                        console.warn(
+                            `    Stopping conversations pagination for ${hrCampaign.name} after ${MAX_CONV_PAGES} pages (safety cap)`
+                        );
+                        break;
+                    }
+                    pageNum++;
+                    const convResponse = await heyreach.getConversations(
+                        hrCampaign.id,
+                        offset,
+                        pageLimit
+                    );
                     const conversations = convResponse?.items ?? [];
                     if (!Array.isArray(conversations) || conversations.length === 0) break;
+                    const totalC = convResponse?.totalCount;
 
                 for (const conv of conversations as unknown[]) {
                             const c = conv as Record<string, unknown>;
@@ -359,11 +373,17 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
                 if (conversations.length < pageLimit) {
                             hasMore = false;
                 } else {
-                            offset += pageLimit;
+                            offset += conversations.length;
+                }
+                if (typeof totalC === "number" && offset >= totalC) {
+                        hasMore = false;
                 }
           }
       } catch (err) {
-              console.warn(`    Warning: Could not fetch conversations for ${hrCampaign.name}`);
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn(
+                `    Warning: Could not fetch conversations for ${hrCampaign.name}: ${msg}`
+              );
       }
 
       campaignsSynced++;

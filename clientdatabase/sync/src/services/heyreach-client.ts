@@ -215,7 +215,7 @@ export class HeyReachClient {
     campaignId?: number,
     offset = 0,
     limit = 50
-  ): Promise<{ items: unknown[] }> {
+  ): Promise<{ items: unknown[]; totalCount?: number }> {
     const raw = await this.request<unknown>("post", "/inbox/GetConversationsV2", {
       offset,
       limit,
@@ -234,7 +234,16 @@ export class HeyReachClient {
       }
       return [];
     })();
-    return { items };
+    let totalCount: number | undefined;
+    if (raw && typeof raw === "object") {
+      const tc = (raw as { totalCount?: number }).totalCount;
+      if (typeof tc === "number") {
+        totalCount = tc;
+      } else if (typeof tc === "string" && /^\d+$/.test(tc)) {
+        totalCount = Number(tc);
+      }
+    }
+    return { items, totalCount };
   }
 
   // ---- Stats ----

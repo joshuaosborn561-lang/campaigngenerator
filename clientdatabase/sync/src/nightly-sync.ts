@@ -290,10 +290,21 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
               const pageLimit = 50;
               let hasMore = true;
               let reachedOldData = false;
+              const MAX_NIGHTLY_CONV_PAGES = 100;
+              let convPage = 0;
 
           while (hasMore && !reachedOldData) {
-                    const convResponse = await heyreach.getConversations(hrCampaign.id, offset, pageLimit);
+                    if (convPage >= MAX_NIGHTLY_CONV_PAGES) {
+                        break;
+                    }
+                    convPage++;
+                    const convResponse = await heyreach.getConversations(
+                        hrCampaign.id,
+                        offset,
+                        pageLimit
+                    );
                     const conversations = convResponse?.items ?? [];
+                    const totalC = convResponse?.totalCount;
                     if (!Array.isArray(conversations) || conversations.length === 0) break;
 
                 for (const conv of conversations as unknown[]) {
@@ -373,11 +384,17 @@ async function syncHeyReachForClient(client: DBClient, store: SupabaseStore) {
                 if (conversations.length < pageLimit) {
                             hasMore = false;
                 } else {
-                            offset += pageLimit;
+                            offset += conversations.length;
+                }
+                if (typeof totalC === "number" && offset >= totalC) {
+                        hasMore = false;
                 }
           }
-      } catch {
-              // Conversation fetch may fail for some campaigns
+      } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn(
+                `  [${client.name}][HeyReach] conversation fetch: ${hrCampaign.name}: ${msg}`
+              );
       }
 
       campaignsSynced++;
