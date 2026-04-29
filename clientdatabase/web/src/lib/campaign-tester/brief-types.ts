@@ -104,6 +104,9 @@ export interface BriefRecord {
   // Module 4
   offer_pool: Offer[] | null;
 
+  /** Campaign Strategy Engine (JSONB): client_profile, objection_map, campaign_ideas, offer_scores, copy_qa */
+  campaign_strategy_engine?: Record<string, unknown> | null;
+
   // Other
   available_assets: Record<string, boolean> | null;
   available_plays: string[] | null;

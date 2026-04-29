@@ -26,7 +26,23 @@ export default function OffersModulePage() {
   const [refining, setRefining] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scoring, setScoring] = useState(false);
+  const [qaSubject, setQaSubject] = useState("");
+  const [qaBody, setQaBody] = useState("");
+  const [qaLoading, setQaLoading] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
+
+  const scoreByOfferId = useMemo(() => {
+    const engine = brief?.campaign_strategy_engine as
+      | { offer_scores?: { offer_id: string; total: number; pass: boolean }[] }
+      | undefined;
+    const scores = engine?.offer_scores ?? [];
+    const m = new Map<string, { total: number; pass: boolean }>();
+    for (const s of scores) {
+      m.set(s.offer_id, { total: s.total, pass: s.pass });
+    }
+    return m;
+  }, [brief?.campaign_strategy_engine]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -143,6 +159,43 @@ export default function OffersModulePage() {
 
   const approvedCount = useMemo(() => pool.filter((o) => o.approved).length, [pool]);
   const ready = approvedCount >= MIN_APPROVED_TO_UNLOCK;
+
+  async function scoreOffers() {
+    setScoring(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/campaign-tester/briefs/${briefId}/strategy-engine/score-offers`,
+        { method: "POST" },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Scoring failed");
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Scoring failed");
+    } finally {
+      setScoring(false);
+    }
+  }
+
+  async function runCopyQa() {
+    setQaLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/campaign-tester/briefs/${briefId}/strategy-engine/copy-qa`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: qaSubject, body_plain_text: qaBody }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "QA failed");
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "QA failed");
+    } finally {
+      setQaLoading(false);
+    }
+  }
 
   async function finishModule() {
     if (!ready) {
@@ -363,6 +416,7 @@ export default function OffersModulePage() {
                     <OfferCard
                       key={o.id}
                       offer={o}
+                      score={scoreByOfferId.get(o.id)}
                       onToggle={(next) => toggleApprove(o.id, next)}
                     />
                   ))}
@@ -374,6 +428,91 @@ export default function OffersModulePage() {
         {error && (
           <div className="ct-alert ct-alert-block" style={{ marginTop: 12 }}>
             {error}
+          </div>
+        )}
+
+        {pool.length > 0 && (
+          <div className="ct-card" style={{ marginTop: 16 }}>
+            <h2>Strategy Engine · Score offers</h2>
+            <div className="ct-card-sub">
+              Five-dimension rubric (20 pts each, pass ≥80). Scores are saved on the brief.
+            </div>
+            <button type="button" className="btn btn-primary" onClick={scoreOffers} disabled={scoring}>
+              {scoring ? "Scoring…" : "Score current offer pool"}
+            </button>
+            {((brief.campaign_strategy_engine as Record<string, unknown> | undefined)?.offer_scores as unknown[])?.length ? (
+              <details style={{ marginTop: 12 }}>
+                <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                  View raw scores JSON
+                </summary>
+                <pre
+                  style={{
+                    marginTop: 8,
+                    padding: 12,
+                    fontSize: 11,
+                    overflow: "auto",
+                    maxHeight: 200,
+                    background: "var(--bg-tertiary)",
+                    borderRadius: "var(--radius-sm)",
+                  }}
+                >
+                  {JSON.stringify(
+                    (brief.campaign_strategy_engine as Record<string, unknown>)?.offer_scores ?? [],
+                    null,
+                    2,
+                  )}
+                </pre>
+              </details>
+            ) : null}
+          </div>
+        )}
+
+        {pool.length > 0 && (
+          <div className="ct-card" style={{ marginTop: 16 }}>
+            <h2>Copy QA (paste Test output)</h2>
+            <div className="ct-card-sub">
+              Paste subject + body from a generated test run to run skeptic checks; result saved on the brief.
+            </div>
+            <div className="ct-field">
+              <label>Subject</label>
+              <input className="ct-input" value={qaSubject} onChange={(e) => setQaSubject(e.target.value)} />
+            </div>
+            <div className="ct-field">
+              <label>Body (plain text)</label>
+              <textarea
+                className="ct-textarea"
+                rows={5}
+                value={qaBody}
+                onChange={(e) => setQaBody(e.target.value)}
+              />
+            </div>
+            <button type="button" className="btn btn-primary" onClick={runCopyQa} disabled={qaLoading}>
+              {qaLoading ? "Reviewing…" : "Run copy QA"}
+            </button>
+            {(brief.campaign_strategy_engine as Record<string, unknown> | undefined)?.copy_qa != null && (
+              <details style={{ marginTop: 12 }}>
+                <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                  Last copy QA result
+                </summary>
+                <pre
+                  style={{
+                    marginTop: 8,
+                    padding: 12,
+                    fontSize: 11,
+                    overflow: "auto",
+                    maxHeight: 220,
+                    background: "var(--bg-tertiary)",
+                    borderRadius: "var(--radius-sm)",
+                  }}
+                >
+                  {JSON.stringify(
+                    (brief.campaign_strategy_engine as Record<string, unknown>)?.copy_qa,
+                    null,
+                    2,
+                  )}
+                </pre>
+              </details>
+            )}
           </div>
         )}
 
@@ -427,9 +566,11 @@ function ChatBubble({ m }: { m: OfferConversationMessage }) {
 
 function OfferCard({
   offer,
+  score,
   onToggle,
 }: {
   offer: Offer;
+  score?: { total: number; pass: boolean };
   onToggle: (next: boolean) => void;
 }) {
   return (
@@ -450,9 +591,21 @@ function OfferCard({
           marginBottom: 6,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span className="ct-chip">#{offer.rank}</span>
           <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{offer.name}</span>
+          {score != null && (
+            <span
+              className="ct-chip"
+              style={{
+                fontSize: 10,
+                borderColor: score.pass ? "var(--green)" : "var(--orange)",
+                color: score.pass ? "var(--green)" : "var(--orange)",
+              }}
+            >
+              QA {score.total}/100{score.pass ? " ✓" : ""}
+            </span>
+          )}
         </div>
         <label
           style={{

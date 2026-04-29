@@ -135,6 +135,7 @@ ${STAGES_FOR_OFFER_IDEATION}
 
 STRICT RULES:
 - Only use information from the campaign brief provided. Do not invent results or case studies that are not listed.
+- If an OBJECTION MAP section is included, shape offers so they neutralize, acknowledge, or route around those objections without sounding defensive.
 - Offer names are 2-5 words, concrete, operator-voice.
 - One-liners are one sentence, plain text, 15-30 words.
 - CTAs are a short reply-inviting sentence (6-14 words). Avoid "quick call Thursday?" — prefer reply-bait or asset-based CTAs unless the offer is a pay-per-result, in which case a direct ask works.
@@ -149,9 +150,10 @@ OUTPUT SCHEMA:
   ]
 }`;
 
-export function buildInitialOfferPrompt(brief: OfferBriefContext): string {
+export function buildInitialOfferPrompt(brief: OfferBriefContext, extraContext?: string): string {
   return (
     renderBriefContext(brief) +
+    (extraContext ? `\n\n${extraContext}` : "") +
     "\n\nTASK: Generate exactly 10 ranked offer ideas for this brief. Rank 1 = most likely to convert for this ICP, rank 10 = least likely."
   );
 }
@@ -190,10 +192,12 @@ export function buildRefinementPrompt(params: {
   currentPool: Offer[];
   history: OfferConversationMessage[];
   latestUserMessage: string;
+  extraContext?: string;
 }): string {
-  const { brief, currentPool, history, latestUserMessage } = params;
+  const { brief, currentPool, history, latestUserMessage, extraContext } = params;
   const parts = [
     renderBriefContext(brief),
+    extraContext ? `\n${extraContext}\n` : "",
     "",
     renderOfferPool(currentPool),
     "",

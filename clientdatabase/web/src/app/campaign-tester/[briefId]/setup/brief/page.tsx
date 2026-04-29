@@ -49,6 +49,8 @@ export default function BriefModulePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [seClient, setSeClient] = useState(false);
+  const [seObjection, setSeObjection] = useState(false);
 
   // Titles ship as a string in the legacy column but we want to edit as chips.
   const [targetTitles, setTargetTitles] = useState<string[]>([]);
@@ -179,6 +181,46 @@ export default function BriefModulePage() {
 
   const complete = isComplete(brief);
 
+  async function runClientProfile() {
+    setSeClient(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/campaign-tester/briefs/${briefId}/strategy-engine/client-profile`,
+        { method: "POST" },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setSeClient(false);
+    }
+  }
+
+  async function runObjectionMap() {
+    setSeObjection(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/campaign-tester/briefs/${briefId}/strategy-engine/objection-map`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setSeObjection(false);
+    }
+  }
+
   return (
     <div className="app-layout">
       <AppSidebar active="tester" />
@@ -196,6 +238,43 @@ export default function BriefModulePage() {
         </div>
 
         <SetupNav briefId={briefId} progress={brief.progress} current="module_1_brief" />
+
+        <div className="ct-card">
+          <h2>Campaign Strategy Engine</h2>
+          <div className="ct-card-sub">
+            Structured outputs saved on this brief (JSON): client profile for ideation, then objection map so Module 4
+            offers aren&apos;t generic. Optional — run after you&apos;ve filled the basics above.
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+            <button type="button" className="btn btn-primary" onClick={runClientProfile} disabled={seClient}>
+              {seClient ? "Building…" : "Build client profile"}
+            </button>
+            <button type="button" className="btn" onClick={runObjectionMap} disabled={seObjection}>
+              {seObjection ? "Mapping…" : "Build objection map"}
+            </button>
+          </div>
+          {(((brief.campaign_strategy_engine as Record<string, unknown> | undefined)?.client_profile ||
+            (brief.campaign_strategy_engine as Record<string, unknown> | undefined)?.objection_map)) && (
+            <details style={{ marginTop: 12 }}>
+              <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                View saved JSON (engine state)
+              </summary>
+              <pre
+                style={{
+                  marginTop: 8,
+                  padding: 12,
+                  fontSize: 11,
+                  overflow: "auto",
+                  maxHeight: 240,
+                  background: "var(--bg-tertiary)",
+                  borderRadius: "var(--radius-sm)",
+                }}
+              >
+                {JSON.stringify(brief.campaign_strategy_engine ?? {}, null, 2)}
+              </pre>
+            </details>
+          )}
+        </div>
 
         <div className="ct-card">
           <h2>Basics</h2>

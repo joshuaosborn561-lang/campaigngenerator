@@ -67,6 +67,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       "apollo_filters",
       // Module 4
       "offer_pool",
+      "campaign_strategy_engine",
       // Other
       "available_assets",
       "available_plays",

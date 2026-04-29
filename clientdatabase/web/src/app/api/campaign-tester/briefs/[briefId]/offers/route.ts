@@ -85,7 +85,15 @@ export async function POST(_req: NextRequest, ctx: RouteContext) {
 
     const brief = briefRow as unknown as BriefRecord;
 
-    const user = buildInitialOfferPrompt(briefToContext(brief));
+    const engine = (briefRow as { campaign_strategy_engine?: Record<string, unknown> | null })
+      .campaign_strategy_engine;
+    const objectionMap = engine?.objection_map;
+    const extra =
+      objectionMap && typeof objectionMap === "object"
+        ? `OBJECTION MAP (use when framing offers — do not contradict the brief):\n${JSON.stringify(objectionMap).slice(0, 12000)}`
+        : "";
+
+    const user = buildInitialOfferPrompt(briefToContext(brief), extra || undefined);
     const raw = await callClaude({
       system: INITIAL_OFFER_SYSTEM_PROMPT,
       user,

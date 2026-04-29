@@ -27,6 +27,8 @@ export default function IcpModulePage() {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ideasLoading, setIdeasLoading] = useState(false);
+  const [ideasNote, setIdeasNote] = useState("");
 
   const [step, setStep] = useState<Step>(1);
   const [icp, setIcp] = useState<IcpRefinement>({});
@@ -95,6 +97,28 @@ export default function IcpModulePage() {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function generateCampaignIdeas() {
+    setIdeasLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/campaign-tester/briefs/${briefId}/strategy-engine/campaign-ideas`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ operator_notes: ideasNote }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Ideation failed");
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ideation failed");
+    } finally {
+      setIdeasLoading(false);
     }
   }
 
@@ -203,6 +227,57 @@ export default function IcpModulePage() {
         </div>
 
         <SetupNav briefId={briefId} progress={brief.progress} current="module_3_icp" />
+
+        <div className="ct-card">
+          <h2>Campaign ideas (Strategy Engine)</h2>
+          <div className="ct-card-sub">
+            Generates 15–22 diversified campaign ideas (list + angle + AI strategy) from this brief. Uses objection map
+            from Module 1 if present. Saved on the brief as JSON for operators and Clay planning.
+          </div>
+          <div className="ct-field" style={{ marginTop: 10 }}>
+            <label>Optional notes for ideation</label>
+            <textarea
+              className="ct-textarea"
+              rows={2}
+              value={ideasNote}
+              onChange={(e) => setIdeasNote(e.target.value)}
+              placeholder="e.g. prioritize hiring-signal plays; avoid webinar angles…"
+            />
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={generateCampaignIdeas}
+            disabled={ideasLoading}
+            style={{ marginTop: 8 }}
+          >
+            {ideasLoading ? "Generating ideas…" : "Generate campaign ideas"}
+          </button>
+          {(brief.campaign_strategy_engine as Record<string, unknown> | undefined)?.campaign_ideas != null && (
+            <details style={{ marginTop: 12 }}>
+              <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                View saved campaign ideas (JSON)
+              </summary>
+              <pre
+                style={{
+                  marginTop: 8,
+                  padding: 12,
+                  fontSize: 11,
+                  overflow: "auto",
+                  maxHeight: 280,
+                  background: "var(--bg-tertiary)",
+                  borderRadius: "var(--radius-sm)",
+                }}
+              >
+                {JSON.stringify(
+                  (brief.campaign_strategy_engine as Record<string, unknown>)?.campaign_ideas ?? {},
+                  null,
+                  2,
+                )}
+              </pre>
+            </details>
+          )}
+        </div>
 
         <StepTabs step={step} onChange={setStep} />
 

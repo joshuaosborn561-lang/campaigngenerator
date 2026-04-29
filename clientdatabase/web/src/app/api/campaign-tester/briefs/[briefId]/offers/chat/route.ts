@@ -95,11 +95,20 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     };
 
     // Call Claude.
+    const engine = (brief as unknown as { campaign_strategy_engine?: Record<string, unknown> | null })
+      .campaign_strategy_engine;
+    const objectionMap = engine?.objection_map;
+    const extra =
+      objectionMap && typeof objectionMap === "object"
+        ? `OBJECTION MAP:\n${JSON.stringify(objectionMap).slice(0, 12000)}`
+        : undefined;
+
     const prompt = buildRefinementPrompt({
       brief: briefToContext(brief),
       currentPool,
       history,
       latestUserMessage: userMessage,
+      extraContext: extra,
     });
 
     const raw = await callClaude({

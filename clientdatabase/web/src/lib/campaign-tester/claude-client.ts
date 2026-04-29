@@ -28,6 +28,8 @@ function getClient(): Anthropic {
   return _client;
 }
 
+export type ClaudeMessageParam = { role: "user" | "assistant"; content: string };
+
 export interface ClaudeCallOptions {
   system: string;
   user: string;
@@ -37,6 +39,60 @@ export interface ClaudeCallOptions {
    * defaults to agency-wide when omitted.
    */
   grounding?: ClaudeGroundingOptions;
+}
+
+export interface ClaudeMultiOptions {
+  system: string;
+  messages: ClaudeMessageParam[];
+  maxTokens?: number;
+  grounding?: ClaudeGroundingOptions;
+}
+
+export async function callClaudeMulti(opts: ClaudeMultiOptions): Promise<string> {
+  const grounding: ClaudeGroundingOptions = opts.grounding ?? {
+    clientId: null,
+    industryVertical: null,
+  };
+  const pack = await buildHistoricalDataPack(grounding);
+
+  const system = [
+    CLAUDE_BEST_PRACTICES_AND_DATA_PRIORITY,
+    "",
+    "--- TASK INSTRUCTIONS ---",
+    "",
+    opts.system,
+    "",
+    "--- HISTORICAL WAREHOUSE PACK (prefer this over generic advice) ---",
+    "",
+    pack,
+  ].join("\n");
+
+  if (!opts.messages.length) {
+    throw new Error("callClaudeMulti: messages must not be empty");
+  }
+  const apiMessages = opts.messages.map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.content,
+  }));
+
+  const client = getClient();
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: opts.maxTokens ?? MAX_TOKENS,
+    system,
+    messages: apiMessages,
+  });
+
+  const text = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+
+  if (!text) {
+    throw new Error("Claude returned no text content");
+  }
+  return text;
 }
 
 export async function callClaude(opts: ClaudeCallOptions): Promise<string> {
